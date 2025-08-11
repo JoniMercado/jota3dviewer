@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Room Viewer — v0.1.5</title>
+<title>Room Viewer — v0.1.6</title>
 
 <script type="importmap">
 {
@@ -32,7 +32,7 @@
   label{display:flex;align-items:center;gap:6px}
 
   /* Side panel (assets) */
-  #sidepanel{position:fixed;right:12px;top:12px;width:280px;max-height:calc(100% - 24px);display:flex;flex-direction:column;gap:8px;overflow:auto;z-index:9}
+  #sidepanel{position:fixed;right:12px;top:12px;width:300px;max-height:calc(100% - 24px);display:flex;flex-direction:column;gap:8px;overflow:auto;z-index:9}
   .card{background:rgba(255,255,255,.9);backdrop-filter:blur(6px);border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:10px 12px}
   details.asset-anim{border:1px solid rgba(0,0,0,.08);border-radius:10px;background:#fff}
   details.asset-anim>summary{list-style:none;cursor:pointer;padding:8px 10px;border-radius:10px;background:#f9f9f9;border:1px solid rgba(0,0,0,.06);font-weight:800;font-size:14px;letter-spacing:.4px}
@@ -43,13 +43,20 @@
   .anim-slider{width:160px}
   .muted{opacity:.7;font-size:12px}
 
+  /* Performance card */
+  details.perf{border:1px solid rgba(0,0,0,.08);border-radius:10px;background:#fff}
+  details.perf>summary{list-style:none;cursor:pointer;padding:8px 10px;border-radius:10px;background:#f9f9f9;border:1px solid rgba(0,0,0,.06);font-weight:700;font-size:14px}
+  details.perf[open]>summary{background:#f6fff5;border-color:#bfe6b9}
+  .perf-grid{display:grid;grid-template-columns:1fr auto;gap:6px 10px;align-items:center;padding:8px 10px}
+  .perf-spark{width:120px;height:30px;border-radius:6px;background:#fff;border:1px solid #e5e5e5}
+
   /* Bottom stats (incluye medidas) */
   #stats{position:fixed;inset:auto 12px 12px 12px;background:rgba(255,255,255,.85);border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:8px 12px;display:flex;gap:16px;flex-wrap:wrap;z-index:5}
 
   #drop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;border:2px dashed #2a2f36;border-radius:16px;background:rgba(30,104,255,.08);color:#1e68ff;pointer-events:auto;z-index:999}
   canvas{display:block;width:100%;height:100%}
 
-  @media (max-width: 960px){ #sidepanel{width:240px} }
+  @media (max-width: 960px){ #sidepanel{width:260px} }
 </style>
 </head>
 <body>
@@ -73,6 +80,26 @@
   </div>
 
   <div id="sidepanel" style="display:none"></div>
+
+  <!-- Performance (siempre visible a la derecha, bajo sidepanel si existe) -->
+  <div id="perfpanel" class="card" style="position:fixed;right:12px;top: auto; bottom: 12px; width:300px; z-index:8; display:none;">
+    <details class="perf" open>
+      <summary>Performance</summary>
+      <div class="perf-grid">
+        <div>FPS</div><div id="perf-fps">—</div>
+        <div>ms/frame</div><div id="perf-ms">—</div>
+        <div>Draw calls</div><div id="perf-calls">—</div>
+        <div>Geometries</div><div id="perf-geoms">—</div>
+        <div>Textures</div><div id="perf-text">—</div>
+        <div>Triangles</div><div id="perf-tris">—</div>
+        <div>GPU</div><div id="perf-gpu">—</div>
+        <div>Auto-rotate</div><div id="perf-rot">—</div>
+        <div>Sparkline</div><canvas id="perf-spark" class="perf-spark"></canvas>
+        <div></div><button id="perf-reset" style="justify-self:end;background:#eee;border:1px solid #ccc;border-radius:6px;padding:4px 8px;cursor:pointer">Reset</button>
+      </div>
+    </details>
+  </div>
+
   <div id="stats"></div>
   <div id="drop">Drop a .glb / .gltf file to view</div>
   <canvas id="c"></canvas>
@@ -154,8 +181,39 @@ let current = null;
 let allNodes = [], doorPanels = [], doorVariantPairs = [], ceilings = [], wallRoots = [];
 let lastHiddenWalls = new Set();
 let assetRoot = null;            // nodo model_
-let animGroups = [];             // [{name, displayName, meshes, morphNames, activeMorph, ...}]
+let animGroups = [];             // [{name, meshes, morphNames, activeMorph, ...}]
 let shadowPlane = null;
+
+/* ---------- Performance panel state ---------- */
+const perfCard = document.getElementById('perfpanel');
+const elFPS = document.getElementById('perf-fps');
+const elMS  = document.getElementById('perf-ms');
+const elCalls = document.getElementById('perf-calls');
+const elGeoms = document.getElementById('perf-geoms');
+const elText  = document.getElementById('perf-text');
+const elTris  = document.getElementById('perf-tris');
+const elGPU   = document.getElementById('perf-gpu');
+const elRot   = document.getElementById('perf-rot');
+const spark   = document.getElementById('perf-spark');
+const ctxSpark = spark.getContext('2d');
+const btnReset = document.getElementById('perf-reset');
+let lastTime = performance.now();
+let fpsHistory = new Array(90).fill(0);
+let fpsEMA = 0;
+
+/* Mostrar siempre el panel de performance */
+perfCard.style.display = '';
+
+/* Obtener nombre de GPU si está disponible */
+(function getGPU(){
+  try{
+    const gl = renderer.getContext();
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    const name = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+    elGPU.textContent = name || '—';
+  }catch{ elGPU.textContent = '—'; }
+})();
+btnReset.addEventListener('click', ()=> renderer.info.reset());
 
 /* ---------- UI mode ---------- */
 function setUIMode(mode){
@@ -465,10 +523,10 @@ function ensureShadowSystem(){
   shadowPlane.position.set(ctr.x, box.min.y + 0.0001, ctr.z);
   shadowPlane.scale.set(size.x*1.05, size.z*1.05, 1);
 
-  // inclinación + giro 15° alrededor del centro (en plano XZ)
+  // inclinación + giro 17.25° (15° * 1.15) a la izquierda en el plano XZ
   const baseDX = size.x * 0.25;
   const baseDZ = size.z * 0.25;
-  const ang = THREE.MathUtils.degToRad(15); // 15 grados
+  const ang = THREE.MathUtils.degToRad(17.25);
   const cos = Math.cos(ang), sin = Math.sin(ang);
   const dx =  cos * baseDX - sin * baseDZ;
   const dz =  sin * baseDX + cos * baseDZ;
@@ -477,8 +535,8 @@ function ensureShadowSystem(){
   dirLight.target.position.set(ctr.x, ctr.y, ctr.z);
   scene.add(dirLight.target);
 
-  // VSM: suavidad de borde (~30%)
-  dirLight.shadow.radius = 3.0;
+  // VSM: más suavidad
+  dirLight.shadow.radius = 4.0; // antes 3.0 → ~+33% suavidad
 
   // Frustum centrado al asset para sombras densas y suaves
   const cam = dirLight.shadow.camera;
@@ -616,7 +674,7 @@ document.getElementById('fileBtn').onclick = ()=>{ fileInput.value=''; fileInput
 fileInput.onchange = ()=>{ const f=fileInput.files?.[0]; if(f) loadBlob(f); };
 document.getElementById('doorsToggle').onchange = e=> toggleDoors(e.target.checked);
 document.getElementById('hideCeilingToggle').onchange = e=>{ ceilings.forEach(c=> c.visible = !e.target.checked); };
-document.getElementById('autoRotateToggle').onchange = e=>{ controls.autoRotate = e.target.checked; };
+document.getElementById('autoRotateToggle').onchange = e=>{ controls.autoRotate = e.target.checked; elRot.textContent = e.target.checked ? 'On' : 'Off'; };
 
 /* ---------- drag & drop ---------- */
 const drop=document.getElementById('drop');
@@ -648,7 +706,39 @@ function resize(){
 addEventListener('resize', ()=>{ resize(); ensureShadowSystem(); });
 resize();
 
+/* ---------- perf update ---------- */
+function drawSparkline(history){
+  const w = spark.width, h = spark.height;
+  ctxSpark.clearRect(0,0,w,h);
+  ctxSpark.fillStyle = '#f9f9f9'; ctxSpark.fillRect(0,0,w,h);
+  ctxSpark.strokeStyle = '#4aa26e';
+  ctxSpark.lineWidth = 1.5;
+  ctxSpark.beginPath();
+  const maxF = 60, minF = 0;
+  history.forEach((v,i)=>{
+    const x = (i/(history.length-1))*w;
+    const y = h - ( (v - minF)/(maxF - minF) )*h;
+    if(i===0) ctxSpark.moveTo(x,y); else ctxSpark.lineTo(x,y);
+  });
+  ctxSpark.stroke();
+}
 renderer.setAnimationLoop(()=>{
+  const now = performance.now();
+  const dt = now - lastTime; lastTime = now;
+  const fpsInst = 1000/dt;
+  fpsEMA = fpsEMA ? (fpsEMA*0.9 + fpsInst*0.1) : fpsInst; // suavizado
+  fpsHistory.push(fpsEMA); if(fpsHistory.length>90) fpsHistory.shift();
+
+  const info = renderer.info;
+  elFPS.textContent   = fpsEMA.toFixed(0);
+  elMS.textContent    = dt.toFixed(1);
+  elCalls.textContent = info.render.calls;
+  elGeoms.textContent = info.memory.geometries;
+  elText.textContent  = info.memory.textures;
+  elTris.textContent  = info.render.triangles.toLocaleString();
+  elRot.textContent   = controls.autoRotate ? 'On' : 'Off';
+  drawSparkline(fpsHistory);
+
   controls.update();
   updateAutoHide();
   ensureShadowSystem();
