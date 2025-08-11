@@ -3,9 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Room Viewer — v0.1.2</title>
+<title>Room Viewer — v0.1.3</title>
 
-<!-- Import map -->
 <script type="importmap">
 {
   "imports": {
@@ -19,13 +18,10 @@
   html,body{height:100%;margin:0}
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Helvetica,Arial,sans-serif;background:#c9c9c9;color:#222}
 
-  /* Header */
   #topbar{
-    position:fixed;inset:12px auto auto 12px;
-    display:flex;gap:8px;flex-wrap:wrap;align-items:center;
+    position:fixed;inset:12px auto auto 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;
     background:rgba(255,255,255,.85);backdrop-filter:blur(6px);
-    border:1px solid rgba(0,0,0,.08);border-radius:12px;
-    padding:10px 12px;z-index:10
+    border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:10px 12px;z-index:10
   }
   #topbar input{background:#f5f5f5;border:1px solid #ccc;color:#111;border-radius:6px;padding:6px 8px}
   #topbar button{background:#1e68ff;border:none;color:white;padding:6px 10px;border-radius:6px;cursor:pointer}
@@ -33,17 +29,10 @@
   #fileInput{display:none}
   #logo{height:48px;margin-right:12px;border-radius:6px}
 
-  /* Side panel (anim) */
-  #sidepanel{
-    position:fixed;right:12px;top:12px;width:280px;max-height:calc(100% - 24px);
-    display:flex;flex-direction:column;gap:8px;overflow:auto;z-index:9
-  }
+  #sidepanel{position:fixed;right:12px;top:12px;width:280px;max-height:calc(100% - 24px);display:flex;flex-direction:column;gap:8px;overflow:auto;z-index:9}
   .card{background:rgba(255,255,255,.9);backdrop-filter:blur(6px);border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:10px 12px}
   details.asset-anim{border:1px solid rgba(0,0,0,.08);border-radius:10px;background:#fff}
-  details.asset-anim>summary{
-    list-style:none;cursor:pointer;padding:8px 10px;border-radius:10px;
-    background:#f9f9f9;border:1px solid rgba(0,0,0,.06);font-weight:600;font-size:14px
-  }
+  details.asset-anim>summary{list-style:none;cursor:pointer;padding:8px 10px;border-radius:10px;background:#f9f9f9;border:1px solid rgba(0,0,0,.06);font-weight:600;font-size:14px}
   details.asset-anim[open]>summary{background:#f3f6ff;border-color:#ccd9ff}
   .anim-panel{padding:8px 10px}
   .anim-group{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
@@ -51,19 +40,13 @@
   .anim-slider{width:160px}
   .muted{opacity:.7;font-size:12px}
 
-  #stats{
-    position:fixed;inset:auto 12px 12px 12px;background:rgba(255,255,255,.85);
-    border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:8px 12px;display:flex;gap:16px;flex-wrap:wrap
-  }
+  #stats{position:fixed;inset:auto 12px 12px 12px;background:rgba(255,255,255,.85);border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:8px 12px;display:flex;gap:16px;flex-wrap:wrap}
   #drop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;border:2px dashed #2a2f36;border-radius:16px;background:rgba(30,104,255,.08);color:#1e68ff;pointer-events:auto;z-index:999}
   canvas{display:block;width:100%;height:100%}
   label{display:flex;align-items:center;gap:6px}
 
   /* Medidas (overlay SVG) */
-  #measureOverlay{
-    position:fixed;inset:0;pointer-events:none;z-index:8;
-    filter: drop-shadow(0 1px 0 rgba(0,0,0,.2));
-  }
+  #measureOverlay{position:fixed;inset:0;pointer-events:none;z-index:8;filter: drop-shadow(0 1px 0 rgba(0,0,0,.2));}
   .m-line{stroke:#2b60ff;stroke-width:2;fill:none}
   .m-arrow{stroke:#2b60ff;stroke-width:2;fill:none;marker-end:url(#arrow)}
   .m-badge{fill:white;stroke:#2b60ff;stroke-width:2}
@@ -73,7 +56,6 @@
 </style>
 </head>
 <body>
-  <!-- Viewer v0.1.2 -->
   <div id="topbar">
     <img id="logo" src="https://jonimercado.github.io/threejs-viewer/jota%203d.jpg" alt="Logo">
     <small>GLB/GLTF URL</small>
@@ -82,7 +64,7 @@
     <button id="fileBtn">Open .glb/.gltf</button>
     <input type="file" id="fileInput" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" />
 
-    <!-- Controles de Rooms (arrancan ocultos) -->
+    <!-- Rooms controls (ocultos por default) -->
     <label style="display:none"><input type="checkbox" id="doorsToggle"> All Doors Open</label>
     <label style="display:none"><input type="checkbox" id="autoHideToggle" checked> Auto-hide front wall</label>
     <label style="display:none"><input type="checkbox" id="hideCeilingToggle" checked> Hide ceiling</label>
@@ -96,7 +78,7 @@
   <div id="drop">Drop a .glb / .gltf file to view</div>
   <canvas id="c"></canvas>
 
-  <!-- Password Gate (simple client-side) -->
+  <!-- Password Gate -->
   <div id="gate" style="position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:2000;">
     <div style="background:#fff;padding:20px 16px;border-radius:14px;min-width:280px;box-shadow:0 10px 30px rgba(0,0,0,.2);display:grid;gap:10px">
       <div style="font-weight:700">Ingresar</div>
@@ -115,7 +97,7 @@ import { OrbitControls }  from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment }from 'three/addons/environments/RoomEnvironment.js';
 
 /* ---------- password gate ---------- */
-const VIEWER_PASSWORD = 'demo'; // <— cámbiala
+const VIEWER_PASSWORD = 'demo';
 const gate   = document.getElementById('gate');
 const gInput = document.getElementById('gateInput');
 const gBtn   = document.getElementById('gateBtn');
@@ -139,6 +121,8 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping      = THREE.ACESFilmicToneMapping;
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled = true;                 // << sombras reales
+renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
 
 const scene  = new THREE.Scene();
 scene.background = new THREE.Color(0xc9c9c9);
@@ -156,6 +140,9 @@ controls.enableDamping = true;
 scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 1.0));
 scene.add(new THREE.AmbientLight(0xffffff, 0.35));
 
+/* Luz direccional para sombras (activada en modo asset) */
+let dirLight = null;
+
 /* ---------- loaders ---------- */
 const draco  = new DRACOLoader().setDecoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/draco/');
 const ktx2   = new KTX2Loader().setTranscoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/basis/').detectSupport(renderer);
@@ -169,11 +156,9 @@ let lastHiddenWalls = new Set();
 /* Asset UI state */
 let assetRoot = null;
 let animGroups = [];
+let shadowPlane = null; // plano receptor de sombras
 
-/* Asset-only helpers */
-let blobShadow = null; // soft shadow mesh
-
-/* ---------- UI mode: clean / room / asset ---------- */
+/* ---------- UI mode ---------- */
 function setUIMode(mode){
   const lab = id => document.getElementById(id)?.closest('label');
   const doors = lab('doorsToggle');
@@ -188,7 +173,7 @@ function setUIMode(mode){
     if(ceil)  ceil.style.display  = 'none';
     side.style.display = 'none';
     svg.style.display  = 'none';
-    removeBlobShadow();
+    removeShadowSystem();
     return;
   }
   const isAsset = (mode === 'asset');
@@ -197,12 +182,11 @@ function setUIMode(mode){
   if(ceil)  ceil.style.display  = isAsset ? 'none' : '';
   side.style.display = '';
   svg.style.display  = isAsset ? '' : 'none';
-  if(!isAsset) removeBlobShadow();
+  if(!isAsset) removeShadowSystem();
 }
-// arranque limpio
 setUIMode('clean');
 
-/* ---------- helpers generales ---------- */
+/* ---------- helpers ---------- */
 function setMsg(t){ document.getElementById('msg').textContent = t || ''; }
 function disposeMat(m){ ['map','normalMap','roughnessMap','metalnessMap','occlusionMap','emissiveMap'].forEach(k=>m[k]?.dispose?.()); }
 function clearModel(){
@@ -210,9 +194,7 @@ function clearModel(){
   scene.remove(current);
   current.traverse?.(o=>{ if(o.geometry) o.geometry.dispose(); const m=o.material; if(m) (Array.isArray(m)?m:[m]).forEach(disposeMat); });
   current=null; allNodes=[]; doorPanels=[]; doorVariantPairs=[]; ceilings=[]; wallRoots=[]; lastHiddenWalls.clear();
-  removeAssetUI();
-  clearMeasureOverlay();
-  removeBlobShadow();
+  removeAssetUI(); clearMeasureOverlay(); removeShadowSystem();
 }
 function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geometry; t += g?.index ? g.index.count/3 : (g?.attributes?.position?.count||0)/3; }}); return Math.round(t); }
 function updateStats(sizeVec){
@@ -240,16 +222,12 @@ function doorGroupKey(name){
   if(m2) return m2[1].toLowerCase();
   return name.toLowerCase();
 }
-
-/* ---------- filename → pre-modo ---------- */
 function guessModeFromFilename(name){
   if(!name) return null;
   const lower = name.toLowerCase();
   if(/_(00|0[0-9])\.(glb|gltf)$/.test(lower)) return 'room';
   return null;
 }
-
-/* ---------- transform utils ---------- */
 function reparentKeepWorld(child, newParent){
   child.updateMatrixWorld(true);
   const childWorld = child.matrixWorld.clone();
@@ -366,333 +344,229 @@ function enforceDoorVariantExclusivity(defaultState='closed'){
   });
 }
 
-/* ---------- Asset UI (model_ + anim_) ---------- */
-function removeAssetUI(){
-  animGroups = [];
-  document.getElementById('sidepanel').innerHTML = '';
-}
+/* ---------- Asset UI (anim_) ---------- */
+function removeAssetUI(){ animGroups = []; document.getElementById('sidepanel').innerHTML = ''; }
 function collectMorphMeshes(root){
   const out = [];
-  root.traverse(o=>{
-    if(o.isMesh && o.morphTargetInfluences && o.morphTargetDictionary){ out.push(o); }
-  });
+  root.traverse(o=>{ if(o.isMesh && o.morphTargetInfluences && o.morphTargetDictionary){ out.push(o); }});
   return out;
 }
 function uniqueNamesFromMeshes(meshes){
   const set = new Set();
-  meshes.forEach(m=>{
-    const dict = m.morphTargetDictionary;
-    if(!dict) return;
-    Object.keys(dict).forEach(k=> set.add(k));
-  });
+  meshes.forEach(m=>{ const d=m.morphTargetDictionary; if(!d) return; Object.keys(d).forEach(k=>set.add(k)); });
   return Array.from(set);
 }
 function findAnimRoots(asset){
-  const animRoots = [];
-  asset.traverse(o=>{
-    if(!o.name) return;
-    const name = o.name.toLowerCase();
-    if(/^anim_/.test(name)) animRoots.push(o);
-  });
-  return animRoots.filter(o=> o !== asset);
+  const arr=[]; asset.traverse(o=>{ if(o!==asset && o.name && /^anim_/i.test(o.name)) arr.push(o); });
+  return arr;
 }
 function buildAnimUI(){
+  if(!animGroups.length) return;
   const side = document.getElementById('sidepanel');
-  const wrap = document.createElement('details');
-  wrap.className = 'asset-anim card';
-  wrap.open = true;
-
-  const summary = document.createElement('summary');
-  summary.textContent = 'Anim';
-  wrap.appendChild(summary);
-
-  const inner = document.createElement('div');
-  inner.className = 'anim-panel';
-  wrap.appendChild(inner);
-
-  const info = document.createElement('div');
-  info.className = 'muted';
-  info.textContent = 'Control de shape keys por grupo (prefijo anim_)';
-  inner.appendChild(info);
-
+  const wrap = document.createElement('details'); wrap.className='asset-anim card'; wrap.open=true;
+  const summary = document.createElement('summary'); summary.textContent='Anim'; wrap.appendChild(summary);
+  const inner = document.createElement('div'); inner.className='anim-panel'; wrap.appendChild(inner);
+  const info = document.createElement('div'); info.className='muted'; info.textContent='Shape keys por grupo (prefijo anim_)'; inner.appendChild(info);
   animGroups.forEach(group=>{
-    const row = document.createElement('div');
-    row.className = 'anim-group';
-
-    const nameBadge = document.createElement('span');
-    nameBadge.className = 'anim-group-name';
-    nameBadge.textContent = group.name;
-    row.appendChild(nameBadge);
-
-    if(group.morphNames.length > 1){
-      const sel = document.createElement('select');
-      group.morphNames.forEach(n=>{
-        const opt = document.createElement('option');
-        opt.value = n; opt.textContent = n;
-        sel.appendChild(opt);
-      });
-      sel.onchange = ()=>{
-        group.activeMorph = sel.value;
-        const m0 = group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
-        if(m0){
-          const i = m0.morphTargetDictionary[group.activeMorph];
-          const v = m0.morphTargetInfluences[i] ?? 0;
-          slider.value = String(v);
-        }
+    const row=document.createElement('div'); row.className='anim-group';
+    const nameBadge=document.createElement('span'); nameBadge.className='anim-group-name'; nameBadge.textContent=group.name; row.appendChild(nameBadge);
+    if(group.morphNames.length>1){
+      const sel=document.createElement('select');
+      group.morphNames.forEach(n=>{ const o=document.createElement('option'); o.value=n;o.textContent=n; sel.appendChild(o); });
+      sel.onchange=()=>{ group.activeMorph=sel.value; const m0=group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
+        if(m0){ const i=m0.morphTargetDictionary[group.activeMorph]; const v=m0.morphTargetInfluences[i]??0; slider.value=String(v); }
       };
-      row.appendChild(sel);
-      group.selectEl = sel;
+      row.appendChild(sel); group.selectEl=sel;
     }
-
-    const slider = document.createElement('input');
-    slider.type = 'range'; slider.min = '0'; slider.max = '1'; slider.step = '0.01'; slider.value = '0';
-    slider.className = 'anim-slider';
-    slider.oninput = ()=>{
-      const val = parseFloat(slider.value);
-      group.meshes.forEach(m=>{
-        const dict = m.morphTargetDictionary;
-        const infl = m.morphTargetInfluences;
-        if(!dict || !infl) return;
-        if(group.activeMorph in dict){
-          infl[dict[group.activeMorph]] = val;
-          m.needsUpdate = true;
-        }
-      });
+    const slider=document.createElement('input'); slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.01'; slider.value='0'; slider.className='anim-slider';
+    slider.oninput=()=>{ const val=parseFloat(slider.value);
+      group.meshes.forEach(m=>{ const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return; if(group.activeMorph in d){ inf[d[group.activeMorph]]=val; m.needsUpdate=true; }});
+      updateMeasureOverlay(); // refrescar medidas si el asset cambia
     };
-    row.appendChild(slider);
-    group.sliderEl = slider;
-
-    inner.appendChild(row);
-
-    const m0 = group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
-    if(m0){
-      const i = m0.morphTargetDictionary[group.activeMorph];
-      const v = m0.morphTargetInfluences[i] ?? 0;
-      slider.value = String(v);
-    }
-    if(group.selectEl){ group.selectEl.value = group.activeMorph; }
+    row.appendChild(slider); group.sliderEl=slider; inner.appendChild(row);
+    const m0=group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
+    if(m0){ const i=m0.morphTargetDictionary[group.activeMorph]; const v=m0.morphTargetInfluences[i]??0; slider.value=String(v); }
+    if(group.selectEl){ group.selectEl.value=group.activeMorph; }
   });
-
   side.appendChild(wrap);
 }
 function setupAssetControlsMulti(rootScene){
-  assetRoot = rootScene.children.find(c => /^model_/i.test(c.name));
+  // encontrar cualquier nodo con prefijo model_ en TODA la jerarquía
+  assetRoot = null;
+  rootScene.traverse(o=>{ if(!assetRoot && o.name && /^model_/i.test(o.name)) assetRoot = o; });
   if(!assetRoot){
-    removeAssetUI();
-    setUIMode('room');
-    clearMeasureOverlay();
-    removeBlobShadow();
-    return;
+    removeAssetUI(); setUIMode('room'); clearMeasureOverlay(); removeShadowSystem(); return;
   }
   setUIMode('asset');
 
-  // Anim groups
+  // anim groups
   const animRoots = findAnimRoots(assetRoot);
   const groups = [];
   animRoots.forEach(ar=>{
-    const meshes = collectMorphMeshes(ar);
-    if(!meshes.length) return;
-    const morphNames = uniqueNamesFromMeshes(meshes);
-    if(!morphNames.length) return;
+    const meshes = collectMorphMeshes(ar); if(!meshes.length) return;
+    const morphNames = uniqueNamesFromMeshes(meshes); if(!morphNames.length) return;
     groups.push({ name: ar.name, meshes, morphNames, activeMorph: morphNames[0], selectEl:null, sliderEl:null });
   });
   animGroups = groups;
   if(animGroups.length) buildAnimUI();
 
-  // Medidas overlay + blob shadow
-  updateMeasureOverlay(); // primer frame
-  ensureBlobShadow();
+  updateMeasureOverlay();
+  ensureShadowSystem();    // sombras suaves al piso
 }
 
 /* ---------- Measurement overlay (SVG) ---------- */
 const svg = document.getElementById('measureOverlay');
 const svgNS = 'http://www.w3.org/2000/svg';
-// defs (arrow marker)
 const defs = document.createElementNS(svgNS,'defs');
 const marker = document.createElementNS(svgNS,'marker');
-marker.setAttribute('id','arrow');
-marker.setAttribute('markerWidth','6');
-marker.setAttribute('markerHeight','6');
-marker.setAttribute('refX','6'); marker.setAttribute('refY','3');
-marker.setAttribute('orient','auto');
-const arrowPath = document.createElementNS(svgNS,'path');
-arrowPath.setAttribute('d','M0,0 L6,3 L0,6 Z');
-arrowPath.setAttribute('fill','#2b60ff');
-marker.appendChild(arrowPath);
-defs.appendChild(marker);
-svg.appendChild(defs);
+marker.setAttribute('id','arrow'); marker.setAttribute('markerWidth','6'); marker.setAttribute('markerHeight','6');
+marker.setAttribute('refX','6'); marker.setAttribute('refY','3'); marker.setAttribute('orient','auto');
+const arrowPath = document.createElementNS(svgNS,'path'); arrowPath.setAttribute('d','M0,0 L6,3 L0,6 Z'); arrowPath.setAttribute('fill','#2b60ff');
+marker.appendChild(arrowPath); defs.appendChild(marker); svg.appendChild(defs);
 
 function clearMeasureOverlay(){ while(svg.childNodes.length>1) svg.removeChild(svg.lastChild); }
-
 function projectToScreen(v3){
   const v = v3.clone().project(camera);
   return { x:(v.x*0.5+0.5)*innerWidth, y:(-v.y*0.5+0.5)*innerHeight, z:v.z, ok:(v.z>-1 && v.z<1) };
 }
 function labelBadge(x,y,text){
-  const padX=10, padY=6, r=14;
-  const textEl = document.createElementNS(svgNS,'text');
-  textEl.setAttribute('class','m-text');
-  textEl.setAttribute('x',x); textEl.setAttribute('y',y);
-  textEl.textContent = text;
-
-  // get text bbox after attach (temp)
-  svg.appendChild(textEl);
-  const bb = textEl.getBBox();
-  svg.removeChild(textEl);
-
-  const bg = document.createElementNS(svgNS,'rect');
-  bg.setAttribute('class','m-badge');
-  bg.setAttribute('x', bb.x - padX);
-  bg.setAttribute('y', bb.y - padY);
-  bg.setAttribute('rx', 12); bg.setAttribute('ry', 12);
-  bg.setAttribute('width', bb.width + padX*2);
-  bg.setAttribute('height', bb.height + padY*2);
-
-  svg.appendChild(bg);
-  svg.appendChild(textEl);
+  const padX=10, padY=6;
+  const textEl = document.createElementNS(svgNS,'text'); textEl.setAttribute('class','m-text'); textEl.setAttribute('x',x); textEl.setAttribute('y',y); textEl.textContent = text;
+  svg.appendChild(textEl); const bb = textEl.getBBox(); svg.removeChild(textEl);
+  const bg = document.createElementNS(svgNS,'rect'); bg.setAttribute('class','m-badge');
+  bg.setAttribute('x', bb.x - padX); bg.setAttribute('y', bb.y - padY); bg.setAttribute('rx', 12); bg.setAttribute('ry', 12);
+  bg.setAttribute('width', bb.width + padX*2); bg.setAttribute('height', bb.height + padY*2);
+  svg.appendChild(bg); svg.appendChild(textEl);
 }
-
 function drawDim(x1,y1,x2,y2,label){
-  const line = document.createElementNS(svgNS,'line');
-  line.setAttribute('class','m-line');
-  line.setAttribute('x1',x1); line.setAttribute('y1',y1);
-  line.setAttribute('x2',x2); line.setAttribute('y2',y2);
-  svg.appendChild(line);
-
-  const a1 = document.createElementNS(svgNS,'line');
-  a1.setAttribute('class','m-arrow');
-  a1.setAttribute('x1',x1); a1.setAttribute('y1',y1);
-  a1.setAttribute('x2',x2); a1.setAttribute('y2',y2);
-  svg.appendChild(a1);
-
-  // etiqueta centrada
-  const cx = (x1+x2)/2, cy = (y1+y2)/2;
-  labelBadge(cx, cy - 14, label);
+  const line = document.createElementNS(svgNS,'line'); line.setAttribute('class','m-line'); line.setAttribute('x1',x1); line.setAttribute('y1',y1); line.setAttribute('x2',x2); line.setAttribute('y2',y2);
+  const a1 = document.createElementNS(svgNS,'line'); a1.setAttribute('class','m-arrow'); a1.setAttribute('x1',x1); a1.setAttribute('y1',y1); a1.setAttribute('x2',x2); a1.setAttribute('y2',y2);
+  svg.appendChild(line); svg.appendChild(a1);
+  const cx = (x1+x2)/2, cy = (y1+y2)/2; labelBadge(cx, cy - 14, label);
 }
-
 function updateMeasureOverlay(){
   if(!assetRoot || svg.style.display==='none') return;
-
-  clearMeasureOverlay(); // deja los <defs>
-
+  clearMeasureOverlay();
   const box = new THREE.Box3().setFromObject(assetRoot);
   const c   = box.getCenter(new THREE.Vector3());
   const size= box.getSize(new THREE.Vector3());
 
-  // elegir "frente" y "izquierda" según cámara
   const frontZ = (camera.position.z >= c.z) ? box.max.z : box.min.z;
   const leftX  = (camera.position.x >= c.x) ? box.min.x : box.max.x;
   const rightX = (leftX===box.min.x) ? box.max.x : box.min.x;
-
   const topY   = box.max.y, botY = box.min.y;
 
-  // puntos 3D
   const topFrontLeft   = new THREE.Vector3(leftX, topY, frontZ);
   const topFrontRight  = new THREE.Vector3(rightX, topY, frontZ);
   const botFrontLeft   = new THREE.Vector3(leftX, botY, frontZ);
-  const botFrontRight  = new THREE.Vector3(rightX, botY, frontZ);
+  const backZ          = (frontZ===box.max.z) ? box.min.z : box.max.z;
+  const botBackLeft    = new THREE.Vector3(leftX, botY, backZ);
 
-  // ancho (X) en el borde superior frontal
   const p1 = projectToScreen(topFrontLeft);
   const p2 = projectToScreen(topFrontRight);
-
-  // alto (Y) en la esquina frontal “izquierda”
   const p3 = projectToScreen(botFrontLeft);
   const p4 = projectToScreen(topFrontLeft);
-
-  // profundo (Z) en el borde inferior “izquierdo” hacia atrás
-  const backZ = (frontZ===box.max.z) ? box.min.z : box.max.z;
-  const botBackLeft = new THREE.Vector3(leftX, botY, backZ);
   const p5 = projectToScreen(botFrontLeft);
   const p6 = projectToScreen(botBackLeft);
 
   const cm = v => `${Math.round(v*100)} cm`;
-
   if(p1.ok && p2.ok) drawDim(p1.x, p1.y, p2.x, p2.y, cm(size.x)); // ancho
   if(p3.ok && p4.ok) drawDim(p3.x, p3.y, p4.x, p4.y, cm(size.y)); // alto
   if(p5.ok && p6.ok) drawDim(p5.x, p5.y, p6.x, p6.y, cm(size.z)); // profundo
 }
 
-/* ---------- Soft blob shadow (assets) ---------- */
-function ensureBlobShadow(){
-  if(blobShadow || !assetRoot) return;
-  // textura radial suave
-  const size = 256;
-  const cnv = document.createElement('canvas'); cnv.width = cnv.height = size;
-  const ctx = cnv.getContext('2d');
-  const g = ctx.createRadialGradient(size/2,size/2, size*0.1, size/2,size/2, size*0.5);
-  g.addColorStop(0,'rgba(0,0,0,0.28)');
-  g.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.fillStyle = g; ctx.fillRect(0,0,size,size);
-  const tex = new THREE.CanvasTexture(cnv);
-
-  const box = new THREE.Box3().setFromObject(assetRoot);
-  const sz = box.getSize(new THREE.Vector3());
-  const plane = new THREE.Mesh(
-    new THREE.PlaneGeometry(1,1),
-    new THREE.MeshBasicMaterial({ map: tex, transparent:true, depthWrite:false })
-  );
-  plane.rotation.x = -Math.PI/2;
-  plane.position.set(box.getCenter(new THREE.Vector3()).x, box.min.y + 0.005, box.getCenter(new THREE.Vector3()).z);
-  // escala proporcional al footprint del asset
-  plane.scale.set(sz.x*1.3, sz.z*1.3, 1);
-  scene.add(plane);
-  blobShadow = plane;
+/* ---------- Sombras suaves (shadow catcher) ---------- */
+function setCastShadow(obj, val){
+  obj.traverse(o=>{ if(o.isMesh){ o.castShadow = !!val; }});
 }
-function removeBlobShadow(){
-  if(!blobShadow) return;
-  blobShadow.material.map?.dispose?.();
-  blobShadow.material.dispose();
-  blobShadow.geometry.dispose();
-  scene.remove(blobShadow);
-  blobShadow = null;
+function ensureShadowSystem(){
+  if(!assetRoot) return;
+
+  // Luz direccional si no existe
+  if(!dirLight){
+    dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(1024,1024);
+    dirLight.shadow.bias = -0.0001;
+    dirLight.shadow.normalBias = 0.02;
+    scene.add(dirLight);
+  }
+
+  // Plano receptor (ShadowMaterial)
+  if(!shadowPlane){
+    const mat = new THREE.ShadowMaterial({ opacity: 0.35 }); // difusa, no dura
+    const geo = new THREE.PlaneGeometry(1,1);
+    shadowPlane = new THREE.Mesh(geo, mat);
+    shadowPlane.rotation.x = -Math.PI/2;
+    shadowPlane.receiveShadow = true;
+    shadowPlane.renderOrder = -1;
+    scene.add(shadowPlane);
+  }
+
+  // Ajustar posición/escala a footprint del asset
+  const box = new THREE.Box3().setFromObject(assetRoot);
+  const size= box.getSize(new THREE.Vector3());
+  const ctr = box.getCenter(new THREE.Vector3());
+
+  shadowPlane.position.set(ctr.x, box.min.y + 0.001, ctr.z);
+  shadowPlane.scale.set(size.x*1.6, size.z*1.6, 1);
+
+  // Luz por encima y algo adelantada, apuntando al asset
+  dirLight.position.set(ctr.x + size.x*0.8, box.max.y + size.y*1.2, ctr.z + size.z*0.8);
+  dirLight.target.position.set(ctr.x, ctr.y, ctr.z);
+  scene.add(dirLight.target);
+
+  // Hacer que el asset proyecte sombras
+  setCastShadow(assetRoot, true);
+}
+function removeShadowSystem(){
+  if(shadowPlane){
+    shadowPlane.geometry.dispose(); shadowPlane.material.dispose();
+    scene.remove(shadowPlane); shadowPlane=null;
+  }
+  if(dirLight){
+    scene.remove(dirLight.target);
+    scene.remove(dirLight);
+    dirLight = null;
+  }
 }
 
 /* ---------- placing ---------- */
 function place(root){
-  // Ocultar colliders y techo por defecto (rooms)
   root.traverse(o=>{
     if(o.isMesh && /collider/i.test(o.name)) o.visible=false;
     if(o.isMesh && /^ceiling\d*$/i.test(o.name)) o.visible=false;
   });
 
-  // centrar / apoyar
   new THREE.Box3().setFromObject(root).getCenter(root.position).multiplyScalar(-1);
   const box  = new THREE.Box3().setFromObject(root);
   const size = box.getSize(new THREE.Vector3());
   root.position.y -= box.min.y;
 
-  // recolectar
   allNodes = []; root.traverse(o=>{ if(o.name) allNodes.push(o); });
   ceilings  = allNodes.filter(o => /^ceiling\d*$/i.test(o.name));
   wallRoots = allNodes.filter(o => /^wall\d+$/i.test(o.name));
 
-  // puertas rotatorias & variantes
   doorPanels       = findDoorPanels(allNodes);
   doorVariantPairs = findDoorVariantPairs(allNodes);
-
-  // solo una variante visible por par (por defecto: closed)
   enforceDoorVariantExclusivity('closed');
-
-  // reparent hardware → panel visible
   reparentHardwareToDoors(allNodes, doorPanels);
 
   current = root; scene.add(root);
 
-  // decidir UI final: asset si tiene model_, si no room
-  const hasModel = current.children.some(c => /^model_/i.test(c.name));
-  setUIMode(hasModel ? 'asset' : 'room');
-  if(hasModel){
+  // detectar cualquier model_ en el árbol
+  assetRoot = null;
+  current.traverse(o=>{ if(!assetRoot && o.name && /^model_/i.test(o.name)) assetRoot = o; });
+
+  setUIMode(assetRoot ? 'asset' : 'room');
+  if(assetRoot){
     setupAssetControlsMulti(current);
-    ensureBlobShadow();
+    ensureShadowSystem();
     updateMeasureOverlay();
   }else{
-    removeAssetUI();
-    clearMeasureOverlay();
-    removeBlobShadow();
+    removeAssetUI(); clearMeasureOverlay(); removeShadowSystem();
   }
 
-  // cámara + stats
   const maxDim = Math.max(size.x,size.y,size.z);
   camera.position.setScalar(maxDim*1.6).setY(maxDim*0.8);
   controls.target.copy(new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3()));
@@ -705,8 +579,7 @@ function place(root){
 function setDoorRotation(o, open){
   const amt = open ? 1 : 0;
   const rad = THREE.MathUtils.degToRad(90 * o.userData.sign * THREE.MathUtils.clamp(amt,0,1));
-  o.quaternion.copy(o.userData.closedQ);
-  o.rotateY(rad);
+  o.quaternion.copy(o.userData.closedQ); o.rotateY(rad);
 }
 function toggleDoors(open){
   doorPanels.forEach(o=> setDoorRotation(o, open));
@@ -718,9 +591,7 @@ function toggleDoors(open){
   if(allNodes?.length){
     const hardware = allNodes.filter(o => /(handle|hinge|knob|hardware)/i.test(o.name));
     hardware.forEach(h=>{
-      const idx          = extractIndex(h.name);
-      const sidePref     = extractSide(h.name);
-      const groupKeyPref = doorGroupKey(h.name);
+      const idx=extractIndex(h.name), sidePref=extractSide(h.name), groupKeyPref=doorGroupKey(h.name);
       if(idx==null) return;
       const target = pickPreferredDoorRoot(idx, sidePref, groupKeyPref);
       if(target && h.parent !== target) reparentKeepWorld(h, target);
@@ -733,53 +604,41 @@ const ray = new THREE.Raycaster();
 function wallRootOf(obj){ let p=obj; while(p){ if(/^wall\d+$/i.test(p.name)) return p; p=p.parent; } return null; }
 function sampleFrontWalls(){
   if(!wallRoots?.length) return new Set();
-  let closest = null, closestDist = Infinity;
+  let closest=null, closestDist=Infinity;
   const distToTarget = camera.position.distanceTo(controls.target);
-  const samples = [ {x:0,y:0},{x:0.14,y:0},{x:-0.14,y:0},{x:0,y:0.14},{x:0,y:-0.14} ];
+  const samples=[{x:0,y:0},{x:0.14,y:0},{x:-0.14,y:0},{x:0,y:0.14},{x:0,y:-0.14}];
   for(const ndc of samples){
     ray.setFromCamera(ndc, camera);
     const hits = ray.intersectObjects(wallRoots, true);
     if(hits.length){
       const h = hits[0];
       if(h.distance < distToTarget*0.995 && h.distance < closestDist){
-        closest = wallRootOf(h.object);
-        closestDist = h.distance;
+        closest = wallRootOf(h.object); closestDist = h.distance;
       }
     }
   }
   return closest ? new Set([closest]) : new Set();
 }
 function updateAutoHide(){
-  const autoHToggle = document.getElementById('autoHideToggle');
+  const autoHToggle=document.getElementById('autoHideToggle');
   if(!autoHToggle || autoHToggle.closest('label').style.display==='none') return;
   if(!autoHToggle.checked || !current) return;
-
   const front = sampleFrontWalls();
-
-  for(const wr of Array.from(lastHiddenWalls)){
-    if(!front.has(wr)){ wr.visible = true; lastHiddenWalls.delete(wr); }
-  }
-  for(const wr of front){
-    if(!lastHiddenWalls.has(wr)){ wr.visible = false; lastHiddenWalls.add(wr); }
-  }
+  for(const wr of Array.from(lastHiddenWalls)){ if(!front.has(wr)){ wr.visible=true; lastHiddenWalls.delete(wr);} }
+  for(const wr of front){ if(!lastHiddenWalls.has(wr)){ wr.visible=false; lastHiddenWalls.add(wr);} }
 }
 
 /* ---------- loading ---------- */
 function loadFromURL(url){
   setUIMode('clean'); setMsg('Loading…'); clearModel();
-  try{
-    const fname = url.split('/').pop()?.split('?')[0];
-    const pre = guessModeFromFilename(fname);
-    if(pre) setUIMode(pre);
-  }catch{}
+  try{ const fname=url.split('/').pop()?.split('?')[0]; const pre=guessModeFromFilename(fname); if(pre) setUIMode(pre);}catch{}
   loader.load(url, g=>{ place(g.scene); setMsg('Loaded'); },
     xhr=>{ if(xhr.total) setMsg(`Loading ${(xhr.loaded/xhr.total*100).toFixed(0)}%`); },
     err=>{ console.error(err); setMsg('Error loading model'); });
 }
 function loadBlob(file){
   setUIMode('clean'); setMsg('Loading local file…'); clearModel();
-  const pre = guessModeFromFilename(file.name);
-  if(pre) setUIMode(pre);
+  const pre=guessModeFromFilename(file.name); if(pre) setUIMode(pre);
   const url = URL.createObjectURL(file);
   loader.load(url, g=>{ place(g.scene); setMsg(file.name); URL.revokeObjectURL(url); },
     undefined, e=>{ console.error(e); setMsg('Error with local file'); });
@@ -794,7 +653,7 @@ fileInput.onchange = ()=>{ const f=fileInput.files?.[0]; if(f) loadBlob(f); };
 document.getElementById('doorsToggle').onchange = e=> toggleDoors(e.target.checked);
 document.getElementById('hideCeilingToggle').onchange = e=>{ ceilings.forEach(c=> c.visible = !e.target.checked); };
 
-/* ---------- drag & drop (sin duplicados) ---------- */
+/* ---------- drag & drop ---------- */
 const drop=document.getElementById('drop');
 ['dragenter','dragover','dragleave','drop'].forEach(ev=>{
   window.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); }, false);
@@ -821,13 +680,14 @@ function resize(){
   renderer.setSize(w,h,false);
   camera.aspect=w/h; camera.updateProjectionMatrix();
 }
-addEventListener('resize', ()=>{ resize(); updateMeasureOverlay(); });
+addEventListener('resize', ()=>{ resize(); updateMeasureOverlay(); ensureShadowSystem(); });
 resize();
 
 renderer.setAnimationLoop(()=>{
   controls.update();
   updateAutoHide();
-  updateMeasureOverlay(); // actualizar medidas si es asset
+  updateMeasureOverlay(); // medidas activas en assets
+  ensureShadowSystem();   // mantener sombra pegada a las patitas si el asset cambia
   renderer.render(scene,camera);
 });
 </script>
