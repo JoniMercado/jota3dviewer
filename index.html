@@ -3,19 +3,20 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>three.js GLB Viewer — Smart + Tools</title>
+<title>three.js GLB Viewer — Smart + AO Modes</title>
 <style>
   html,body{height:100%;margin:0}
-  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Helvetica,Arial,sans-serif;background:#0b0d10;color:#e6e6e6}
-  #topbar{position:fixed;inset:12px 12px auto 12px;display:flex;gap:8px;align-items:center;background:rgba(20,22,26,.8);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:10px 12px;z-index:10}
-  #topbar input{width:440px;max-width:60vw;background:#0f1216;border:1px solid #2a2f36;color:#ddd;border-radius:10px;padding:8px 10px}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Helvetica,Arial,sans-serif;background:#c9c9c9;color:#111}
+  #topbar{position:fixed;inset:12px 12px auto 12px;display:flex;gap:8px;align-items:center;background:rgba(255,255,255,.75);backdrop-filter:blur(6px);border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:10px 12px;z-index:10}
+  #topbar input{width:440px;max-width:60vw;background:#f3f3f3;border:1px solid #d0d0d0;color:#111;border-radius:10px;padding:8px 10px}
   #topbar button{background:#1e68ff;border:none;color:white;padding:8px 12px;border-radius:10px;cursor:pointer}
   #topbar small{opacity:.8}
   #fileInput{display:none}
-  #stats{position:fixed;inset:auto 12px 12px 12px;background:rgba(20,22,26,.8);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:8px 12px;display:flex;gap:16px;flex-wrap:wrap}
+  #stats{position:fixed;inset:auto 12px 12px 12px;background:rgba(255,255,255,.75);border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:8px 12px;display:flex;gap:16px;flex-wrap:wrap}
   canvas{display:block;width:100%;height:100%}
 </style>
 
+<!-- Import map -->
 <script type="importmap">
 {
   "imports": {
@@ -47,7 +48,7 @@ import { OrbitControls }  from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment }from 'three/addons/environments/RoomEnvironment.js';
 import GUI from 'https://unpkg.com/lil-gui@0.19/dist/lil-gui.esm.js';
 
-/* --- renderer / scene / camera --- */
+/* ---------- base viewer ---------- */
 const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -62,24 +63,24 @@ camera.position.set(2, 1.2, 2);
 const pmrem = new THREE.PMREMGenerator(renderer);
 let currentEnv = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 scene.environment = currentEnv;
-renderer.setClearColor(new THREE.Color('#0b0d10'));
+renderer.setClearColor(new THREE.Color('#c9c9c9'));
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 0.6, 0);
 controls.enableDamping = true;
 
-/* --- loaders --- */
+/* loaders */
 const draco = new DRACOLoader().setDecoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/draco/');
 const ktx2  = new KTX2Loader().setTranscoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/basis/').detectSupport(renderer);
 const loader = new GLTFLoader().setDRACOLoader(draco).setKTX2Loader(ktx2);
 
-/* --- iluminación integral (no direccional) --- */
+/* integral lighting (no directional) */
 const hemi = new THREE.HemisphereLight(0xffffff, 0x404040, 0.9);
 scene.add(hemi);
 const amb  = new THREE.AmbientLight(0xffffff, 0.25);
 scene.add(amb);
 
-/* --- helpers --- */
+/* helpers */
 let current, lastGLTF=null;
 function disposeMat(m){ ['map','normalMap','roughnessMap','metalnessMap','occlusionMap','emissiveMap'].forEach(k=>m[k]?.dispose?.()); }
 function clearModel(){
@@ -90,7 +91,7 @@ function clearModel(){
 }
 function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geometry; if(g?.index) t+=g.index.count/3; else if(g?.attributes?.position) t+=g.attributes.position.count/3; }}); return Math.round(t); }
 
-/* --- place() base --- */
+/* base place() */
 function place(root){
   new THREE.Box3().setFromObject(root).getCenter(root.position).multiplyScalar(-1);
   const box = new THREE.Box3().setFromObject(root);
@@ -107,29 +108,29 @@ function place(root){
   controls.target.copy(new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3()));
   controls.update();
 
-  buildVariantsGUI(); // si aplica
+  buildVariantsGUI(); // if present
+  // re-apply AO patch on new model
+  applyAOToMaterials(params.aoMode, params.aoStrength, params.aoEnabled);
 }
 
-/* --- inteligencia por nombres --- */
+/* ------------ name intelligence ------------ */
 const NAME = {
-  wall:        (n)=>/^wall\d+$/i.test(n),          // solo nodos raiz wallN
-  iwall:       (n)=>/^interiorwall\d+$/i.test(n),
-  ceiling:     (n)=>/^ceiling\d+$/i.test(n),
-  floor:       (n)=>/^floor\d+$/i.test(n),
-  doorPanel:   (n)=>/(^|_)((leftpanel|rightpanel)\d+)$/i.test(n) // solo paneles, no hijos
+  wallRoot:   (n)=>/^wall\d+$/i.test(n),          // root nodes ONLY like "wall0"
+  iWallRoot:  (n)=>/^interiorwall\d+$/i.test(n),
+  ceiling:    (n)=>/^ceiling\d+$/i.test(n),
+  floor:      (n)=>/^floor\d+$/i.test(n),
+  doorPanel:  (n)=>/(^|_)((leftpanel|rightpanel)\d+)$/i.test(n) // panels only, no children
 };
-
 function flatten(root){ const list=[]; root.traverse(o=>{ if(o.name) list.push(o); }); return list; }
 function byNameExact(list, pred){ return list.filter(o => pred(o.name)); }
 
-/* puertas */
+/* doors */
 function prepDoorPanels(list){
   const doors=[];
   list.forEach(o=>{
-    // asegurar que no sean hijos de otras piezas con nombres compuestos
     const side = /leftpanel/i.test(o.name) ? 'left' : 'right';
     o.userData.closedQ = o.quaternion.clone();
-    o.userData.sign    = side === 'left' ? +1 : -1; // +Y izq, -Y der
+    o.userData.sign    = side === 'left' ? +1 : -1; // +Y left, -Y right
     doors.push(o);
   });
   return doors;
@@ -141,40 +142,63 @@ function setDoorAmount(o, amt){
   o.rotateY(rad);
 }
 
-/* auto-hide wall */
+/* auto-hide wall (camera → target) */
 const raycaster = new THREE.Raycaster();
 let autoHideWall = { enabled:false, hidden:null };
+function getWallRootFromHit(obj){
+  // climb to ancestor named wallN
+  let p=obj;
+  while(p){
+    if (NAME.wallRoot(p.name)) return p;
+    p = p.parent;
+  }
+  return null;
+}
+function updateAutoHideWall(){
+  if(!autoHideWall.enabled || !STRUCT?.wallRoots?.length || !current) return;
+  const dir = new THREE.Vector3().subVectors(controls.target, camera.position).normalize();
+  raycaster.set(camera.position, dir);
+  // intersect entire model; we’ll resolve wall root per hit
+  const hits = raycaster.intersectObject(current, true);
+  let pickedWall = null;
+  for (const h of hits){
+    if (h.object.visible === false) continue;
+    const wr = getWallRootFromHit(h.object);
+    if (wr){ pickedWall = wr; break; }
+  }
+  if (pickedWall !== autoHideWall.hidden){
+    if (autoHideWall.hidden) autoHideWall.hidden.visible = true;
+    autoHideWall.hidden = pickedWall;
+    if (autoHideWall.hidden) autoHideWall.hidden.visible = false;
+  }
+}
 
-/* estado / GUI */
+/* state / GUI */
 let STRUCT=null, DOORS=[];
 function setGroupVisible(nodes, v){ nodes.forEach(n=> n.visible=v); }
 
-/* envolver place para construir estructura + GUI por modelo */
+/* wrap place to build structure + GUI per model */
 const _placeOrig = place;
 place = (root)=>{
   _placeOrig(root);
 
-  const all       = flatten(root);
-
-  // colecciones SOLO en nodos raíz que coincidan exactamente (sin children ni nombres compuestos)
-  const walls     = byNameExact(all, NAME.wall);
-  const iWalls    = byNameExact(all, NAME.iwall);
-  const ceilings  = byNameExact(all, NAME.ceiling);
-  const floors    = byNameExact(all, NAME.floor);
-  const panels    = byNameExact(all, NAME.doorPanel);
+  const all        = flatten(root);
+  const wallRoots  = byNameExact(all, NAME.wallRoot);
+  const iWalls     = byNameExact(all, NAME.iWallRoot);
+  const ceilings   = byNameExact(all, NAME.ceiling);
+  const floors     = byNameExact(all, NAME.floor);
+  const panels     = byNameExact(all, NAME.doorPanel);
   DOORS = prepDoorPanels(panels);
-
-  // colliders (por nombre, cualquiera)
-  const colliders = all.filter(o => /collider/i.test(o.name));
+  const colliders  = all.filter(o => /collider/i.test(o.name));
 
   STRUCT = {
-    walls, iWalls, ceilings, floors, colliders,
+    wallRoots, iWalls, ceilings, floors, colliders,
     show: { walls:true, iWalls:true, ceilings:true, floors:true, colliders:false },
     doorsOpen: false,
     allNodes: all
   };
 
-  setGroupVisible(walls,     STRUCT.show.walls);
+  setGroupVisible(wallRoots, STRUCT.show.walls);
   setGroupVisible(iWalls,    STRUCT.show.iWalls);
   setGroupVisible(ceilings,  STRUCT.show.ceilings);
   setGroupVisible(floors,    STRUCT.show.floors);
@@ -185,22 +209,7 @@ place = (root)=>{
   buildIsolateGUI();
 };
 
-function updateAutoHideWall(){
-  if(!autoHideWall.enabled || !STRUCT?.walls?.length || !current) return;
-  const dir = new THREE.Vector3().subVectors(controls.target, camera.position).normalize();
-  raycaster.set(camera.position, dir);
-  const hits = raycaster.intersectObjects(STRUCT.walls, true);
-  const first = hits.find(h => h.object.visible !== false);
-  const newWall = first ? findAncestorInSet(first.object, new Set(STRUCT.walls)) : null;
-  if(newWall !== autoHideWall.hidden){
-    if(autoHideWall.hidden) autoHideWall.hidden.visible = true;
-    autoHideWall.hidden = newWall;
-    if(autoHideWall.hidden) autoHideWall.hidden.visible = false;
-  }
-}
-function findAncestorInSet(obj,set){ let p=obj; while(p && !set.has(p)) p=p.parent; return p||null; }
-
-/* ---------- GUI ---------- */
+/* ---------------- GUI (render/camera/env/structure/doors/variants/AO/isolate) ---------------- */
 const gui = new GUI({ title:'Viewer', width:330 });
 gui.domElement.style.position='fixed';
 gui.domElement.style.right='12px';
@@ -217,7 +226,7 @@ const ToneMapByName = {
 const params = {
   exposure: renderer.toneMappingExposure,
   toneMapping: 'ACESFilmic',
-  background: '#0b0d10',
+  background: '#c9c9c9',
   highQuality: true,
   wireframe: false,
   fov: camera.fov,
@@ -226,9 +235,17 @@ const params = {
   autoHideWall: false,
   env: 'Room',
   envURL: '',
+  // Doors
+  doorsOpen: false,
+  // AO
+  aoEnabled: true,
+  aoMode: 'Default', // 'Default' | 'Albedo×AO'
+  aoStrength: 0.6,
+  // Isolate
   isolateQuery: ''
 };
 
+/* Render */
 const fRender = gui.addFolder('Render');
 fRender.add(params, 'exposure', 0.2, 2.5, 0.01).onChange(v=> renderer.toneMappingExposure=v);
 fRender.add(params, 'toneMapping', Object.keys(ToneMapByName)).onChange(n=> renderer.toneMapping = ToneMapByName[n]);
@@ -243,19 +260,20 @@ fRender.add(params, 'wireframe').onChange(v=>{
   });
 });
 
+/* Camera */
 const fCam = gui.addFolder('Camera');
 fCam.add(params, 'fov', 20, 90, 1).onChange(v=>{ camera.fov=v; camera.updateProjectionMatrix(); });
 fCam.add(params, 'autoRotate').onChange(v=> controls.autoRotate=v);
 fCam.add(params, 'autoRotateSpeed', -5, 5, 0.1).onChange(v=> controls.autoRotateSpeed=v);
 
 /* Structure */
-let _guiStructFolder=null, _guiDoorsFolder=null, _guiEnvFolder=null, _guiVariantsFolder=null, _guiIsolateFolder=null;
+let _guiStructFolder=null, _guiDoorsFolder=null, _guiEnvFolder=null, _guiVariantsFolder=null, _guiIsolateFolder=null, _guiAOFolder=null;
 
 function buildStructureGUI(){
   _guiStructFolder?.destroy?.();
   _guiStructFolder = gui.addFolder('Structure');
   const S = STRUCT.show;
-  _guiStructFolder.add(S, 'walls').name('Walls on').onChange(v=> setGroupVisible(STRUCT.walls, v));
+  _guiStructFolder.add(S, 'walls').name('Walls on').onChange(v=> setGroupVisible(STRUCT.wallRoots, v));
   _guiStructFolder.add(S, 'iWalls').name('Interior walls on').onChange(v=> setGroupVisible(STRUCT.iWalls, v));
   _guiStructFolder.add(S, 'ceilings').name('Ceilings on').onChange(v=> setGroupVisible(STRUCT.ceilings, v));
   _guiStructFolder.add(S, 'floors').name('Floors on').onChange(v=> setGroupVisible(STRUCT.floors, v));
@@ -266,7 +284,7 @@ function buildStructureGUI(){
   });
 }
 
-/* Doors — toggle on/off */
+/* Doors — toggle */
 function setAllDoorsOpen(open){
   const amt = open ? 1 : 0;
   DOORS.forEach(o=> setDoorAmount(o, amt));
@@ -274,12 +292,7 @@ function setAllDoorsOpen(open){
 function buildDoorsGUI(){
   _guiDoorsFolder?.destroy?.();
   _guiDoorsFolder = gui.addFolder('Doors');
-  _guiDoorsFolder.add(STRUCT, 'doorsOpen').name('All doors open').onChange(v=> setAllDoorsOpen(v));
-  // sliders individuales (opcional, dejalos para control fino)
-  DOORS.forEach(o=>{
-    const obj = { open: 0 };
-    _guiDoorsFolder.add(obj, 'open', 0, 1, 0.01).name(o.name).onChange(v=> setDoorAmount(o, v));
-  });
+  _guiDoorsFolder.add(params, 'doorsOpen').name('All doors open').onChange(v=> setAllDoorsOpen(v));
 }
 
 /* Environment / HDRI */
@@ -328,6 +341,70 @@ function buildVariantsGUI(){
   });
 }
 
+/* AO Controls (engine vs Albedo×AO) */
+function patchStandardAO(mat, mode, strength, enabled){
+  if(!enabled){
+    if(mat.userData._aoPatched){
+      delete mat.onBeforeCompile;
+      delete mat.userData._aoPatched;
+      mat.needsUpdate = true;
+    }
+    return;
+  }
+  mat.userData._aoPatched = true;
+  mat.onBeforeCompile = (shader)=>{
+    shader.uniforms.uAoStrength = { value: strength };
+    if (mode === 'Albedo×AO') shader.defines.ENABLE_ALBEDO_AO = true;
+
+    // Re-scale engine's indirect diffuse AO effect (non-destructive)
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <aomap_fragment>',
+`#include <aomap_fragment>
+#ifdef USE_AOMAP
+  // after engine applied ambientOcclusion to indirectDiffuse, re-mix by strength
+  reflectedLight.indirectDiffuse = mix( reflectedLight.indirectDiffuse, reflectedLight.indirectDiffuse * ambientOcclusion, uAoStrength );
+#endif
+`
+    );
+
+    // Optionally multiply albedo by AO (to your taste)
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <output_fragment>',
+`#ifdef USE_AOMAP
+  float _aoSample = ambientOcclusion;
+#else
+  float _aoSample = 1.0;
+#endif
+#ifdef ENABLE_ALBEDO_AO
+  diffuseColor.rgb *= mix(1.0, _aoSample, uAoStrength);
+#endif
+#include <output_fragment>`
+    );
+  };
+  mat.needsUpdate = true;
+}
+function applyAOToMaterials(mode, strength, enabled){
+  if(!current) return;
+  current.traverse(o=>{
+    if(o.isMesh){
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      mats.forEach(m=>{
+        if (m && (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial)){
+          patchStandardAO(m, mode, strength, enabled);
+        }
+      });
+    }
+  });
+}
+function buildAOgui(){
+  _guiAOFolder?.destroy?.();
+  _guiAOFolder = gui.addFolder('Ambient Occlusion');
+  _guiAOFolder.add(params, 'aoEnabled').name('Enable AO').onChange(()=> applyAOToMaterials(params.aoMode, params.aoStrength, params.aoEnabled));
+  _guiAOFolder.add(params, 'aoMode', ['Default','Albedo×AO']).onChange(()=> applyAOToMaterials(params.aoMode, params.aoStrength, params.aoEnabled));
+  _guiAOFolder.add(params, 'aoStrength', 0, 1, 0.01).name('Strength').onChange(v=> applyAOToMaterials(params.aoMode, v, params.aoEnabled));
+}
+buildAOgui();
+
 /* Isolate */
 function buildIsolateGUI(){
   _guiIsolateFolder?.destroy?.();
@@ -341,10 +418,7 @@ function buildIsolateGUI(){
       const keepSet = new Set(keep);
       current.traverse(o=>{
         let visible = keepSet.has(o);
-        // mantener ancestros de keep
-        keep.forEach(n=>{
-          let p=n.parent; while(p){ if(p===o) visible=true; p=p.parent; }
-        });
+        keep.forEach(n=>{ let p=n.parent; while(p){ if(p===o) visible=true; p=p.parent; }});
         if(o!==current) o.visible = visible;
       });
     },
@@ -358,7 +432,7 @@ function buildIsolateGUI(){
   _guiIsolateFolder.add(api, 'clear').name('Clear isolate');
 }
 
-/* --- carga --- */
+/* ---------- load UI ---------- */
 function setMsg(t){ document.getElementById('msg').textContent = t || ''; }
 function loadFromURL(url){
   setMsg('Loading…'); clearModel();
@@ -386,10 +460,11 @@ const fileInput=document.getElementById('fileInput');
 document.getElementById('fileBtn').onclick=()=>{ fileInput.value=''; fileInput.click(); };
 fileInput.onchange=()=>{ const f=fileInput.files?.[0]; if(f) loadLocal(f); };
 
+/* ?model= */
 const modelURL=new URLSearchParams(location.search).get('model');
 if(modelURL){ document.getElementById('url').value=modelURL; loadFromURL(modelURL); }
 
-/* --- loop --- */
+/* ---------- loop ---------- */
 function resize(){
   const w=innerWidth,h=innerHeight;
   renderer.setSize(w,h,false);
@@ -406,3 +481,4 @@ renderer.setAnimationLoop(()=>{
 </script>
 </body>
 </html>
+
