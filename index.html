@@ -1,33 +1,33 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Room Viewer — v0.0.2</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Room Viewer — v0.0.2</title>
 
-<!-- Import map (funciona bien en GitHub Pages) -->
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://unpkg.com/three@0.164/build/three.module.js",
-    "three/addons/": "https://unpkg.com/three@0.164/examples/jsm/"
+  <!-- Import map (funciona bien en GitHub Pages) -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.164/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.164/examples/jsm/"
+    }
   }
-}
-</script>
+  </script>
 
-<style>
-  html,body{height:100%;margin:0}
-  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Helvetica,Arial,sans-serif;background:#c9c9c9;color:#222}
-  #topbar{position:fixed;inset:12px 12px auto 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:rgba(255,255,255,.85);backdrop-filter:blur(6px);border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:10px 12px;z-index:10}
-  #topbar input,#topbar select{background:#f5f5f5;border:1px solid #ccc;color:#111;border-radius:6px;padding:6px 8px}
-  #topbar button{background:#1e68ff;border:none;color:white;padding:6px 10px;border-radius:6px;cursor:pointer}
-  #topbar small{opacity:.7}
-  #fileInput{display:none}
-  #stats{position:fixed;inset:auto 12px 12px 12px;background:rgba(255,255,255,.85);border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:8px 12px;display:flex;gap:16px;flex-wrap:wrap}
-  #drop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;border:2px dashed #2a2f36;border-radius:16px;background:rgba(30,104,255,.08);color:#1e68ff;pointer-events:auto}
-  canvas{display:block;width:100%;height:100%}
-  label{display:flex;align-items:center;gap:6px}
-</style>
+  <style>
+    html,body{height:100%;margin:0}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Helvetica,Arial,sans-serif;background:#c9c9c9;color:#222}
+    #topbar{position:fixed;inset:12px 12px auto 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:rgba(255,255,255,.85);backdrop-filter:blur(6px);border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:10px 12px;z-index:10}
+    #topbar input,#topbar select{background:#f5f5f5;border:1px solid #ccc;color:#111;border-radius:6px;padding:6px 8px}
+    #topbar button{background:#1e68ff;border:none;color:white;padding:6px 10px;border-radius:6px;cursor:pointer}
+    #topbar small{opacity:.7}
+    #fileInput{display:none}
+    #stats{position:fixed;inset:auto 12px 12px 12px;background:rgba(255,255,255,.85);border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:8px 12px;display:flex;gap:16px;flex-wrap:wrap}
+    #drop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;border:2px dashed #2a2f36;border-radius:16px;background:rgba(30,104,255,.08);color:#1e68ff;pointer-events:auto}
+    canvas{display:block;width:100%;height:100%}
+    label{display:flex;align-items:center;gap:6px}
+  </style>
 </head>
 <body>
   <div id="topbar">
@@ -54,501 +54,518 @@
     </label>
     <small id="msg"></small>
   </div>
+
   <div id="stats"></div>
   <div id="drop">Drop a .glb file to view</div>
   <canvas id="c"></canvas>
 
-<script type="module">
-import * as THREE from 'three';
-import { GLTFLoader }     from 'three/addons/loaders/GLTFLoader.js';
-import { DRACOLoader }    from 'three/addons/loaders/DRACOLoader.js';
-import { KTX2Loader }     from 'three/addons/loaders/KTX2Loader.js';
-import { RGBELoader }     from 'three/addons/loaders/RGBELoader.js';
-import { OrbitControls }  from 'three/addons/controls/OrbitControls.js';
-import { RoomEnvironment }from 'three/addons/environments/RoomEnvironment.js';
+  <script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader }     from 'three/addons/loaders/GLTFLoader.js';
+    import { DRACOLoader }    from 'three/addons/loaders/DRACOLoader.js';
+    import { KTX2Loader }     from 'three/addons/loaders/KTX2Loader.js';
+    import { RGBELoader }     from 'three/addons/loaders/RGBELoader.js';
+    import { OrbitControls }  from 'three/addons/controls/OrbitControls.js';
+    import { RoomEnvironment }from 'three/addons/environments/RoomEnvironment.js';
 
-/* ---------- renderer / scene / camera ---------- */
-const canvas   = document.getElementById('c');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping      = THREE.ACESFilmicToneMapping;
-renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+    /* ---------- renderer / scene / camera ---------- */
+    const canvas   = document.getElementById('c');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping      = THREE.ACESFilmicToneMapping;
+    renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 
-const scene  = new THREE.Scene();
-scene.background = new THREE.Color(0xc9c9c9);
+    const scene  = new THREE.Scene();
+    scene.background = new THREE.Color(0xc9c9c9);
 
-const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 100);
-camera.position.set(2,1.2,2);
+    const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 100);
+    camera.position.set(2,1.2,2);
 
-const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0,0.6,0);
-controls.enableDamping = true;
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0,0.6,0);
+    controls.enableDamping = true;
 
-/* iluminación integral */
-scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 1.0));
-scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+    /* iluminación integral */
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 1.0));
+    scene.add(new THREE.AmbientLight(0xffffff, 0.35));
 
-/* ---------- loaders ---------- */
-const draco  = new DRACOLoader().setDecoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/draco/');
-const ktx2   = new KTX2Loader().setTranscoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/basis/').detectSupport(renderer);
-const loader = new GLTFLoader().setDRACOLoader(draco).setKTX2Loader(ktx2);
+    /* ---------- loaders ---------- */
+    const draco  = new DRACOLoader().setDecoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/draco/');
+    const ktx2   = new KTX2Loader().setTranscoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/basis/').detectSupport(renderer);
+    const loader = new GLTFLoader().setDRACOLoader(draco).setKTX2Loader(ktx2);
 
-/* ---------- state ---------- */
-let current = null;
-let allNodes = [], doorPanels = [], doorVariantPairs = [], ceilings = [], wallRoots = [];
-let lastHiddenWalls = new Set(); // auto-hide
-let lastGLBBytes = null;         // peso del GLB
-const MAX_DOOR_DEG = 90;
+    /* ---------- state ---------- */
+    let current = null;
+    let allNodes = [], doorPanels = [], doorVariantPairs = [], ceilings = [], wallRoots = [];
+    let lastHiddenWalls = new Set(); // auto-hide
+    let lastGLBBytes = null;         // peso del GLB
+    const MAX_DOOR_DEG = 90;
 
-/* ---------- utils ---------- */
-function setMsg(t){ document.getElementById('msg').textContent = t || ''; }
-function humanBytes(b){
-  if(b==null) return '—';
-  const u=['B','KB','MB','GB']; let i=0; let n=b;
-  while(n>=1024 && i<u.length-1){ n/=1024; i++; }
-  return `${n.toFixed(n<10&&i>0?1:0)} ${u[i]}`;
-}
-function disposeMat(m){ ['map','normalMap','roughnessMap','metalnessMap','occlusionMap','emissiveMap'].forEach(k=>m[k]?.dispose?.()); }
-function clearModel(){
-  if(!current) return;
-  scene.remove(current);
-  current.traverse?.(o=>{ if(o.geometry) o.geometry.dispose(); const m=o.material; if(m) (Array.isArray(m)?m:[m]).forEach(disposeMat); });
-  current=null; allNodes=[]; doorPanels=[]; doorVariantPairs=[]; ceilings=[]; wallRoots=[]; lastHiddenWalls.clear();
-}
-function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geometry; t += g?.index ? g.index.count/3 : (g?.attributes?.position?.count||0)/3; }}); return Math.round(t); }
-function updateStats(sizeVec){
-  const tris = current ? triCount(current).toLocaleString() : '—';
-  const sz   = sizeVec ? `${sizeVec.x.toFixed(2)} × ${sizeVec.y.toFixed(2)} × ${sizeVec.z.toFixed(2)} m` : '—';
-  document.getElementById('stats').textContent = `Tris: ${tris} | Size: ${sz} | GLB: ${humanBytes(lastGLBBytes)}`;
-}
-
-/* ---------- AO: MULTIPLY puro sobre diffuseColor (sin pow ni mix) ---------- */
-/*  AO final = clamp( ambientOcclusion / (1.0 + strength), 0..1 )
-    Luego: diffuseColor.rgb *= AO final
-    - Afecta tanto color embebido como textura de albedo porque opera sobre diffuseColor final.
-*/
-function patchAlbedoAO(mat, strength, enabled){
-  if(!enabled){
-    if(mat.userData._aoPatched){
-      delete mat.onBeforeCompile;
-      delete mat.userData._aoPatched;
-      delete mat.userData._uAo;
-      mat.needsUpdate = true;
+    /* ---------- utils ---------- */
+    function setMsg(t){ document.getElementById('msg').textContent = t || ''; }
+    function humanBytes(b){
+      if(b==null) return '—';
+      const u=['B','KB','MB','GB']; let i=0; let n=b;
+      while(n>=1024 && i<u.length-1){ n/=1024; i++; }
+      return `${n.toFixed(n<10&&i>0?1:0)} ${u[i]}`;
     }
-    return;
-  }
-  const uRef = mat.userData._uAo || (mat.userData._uAo = { value: strength });
-  uRef.value = strength;
+    function disposeMat(m){ ['map','normalMap','roughnessMap','metalnessMap','occlusionMap','emissiveMap'].forEach(k=>m[k]?.dispose?.()); }
+    function clearModel(){
+      if(!current) return;
+      scene.remove(current);
+      current.traverse?.(o=>{
+        if(o.geometry) o.geometry.dispose();
+        const m=o.material;
+        if(m) (Array.isArray(m)?m:[m]).forEach(disposeMat);
+      });
+      current=null; allNodes=[]; doorPanels=[]; doorVariantPairs=[]; ceilings=[]; wallRoots=[]; lastHiddenWalls.clear();
+    }
+    function triCount(obj){
+      let t=0;
+      obj.traverse(o=>{
+        if(o.isMesh){
+          const g=o.geometry;
+          t += g?.index ? g.index.count/3 : (g?.attributes?.position?.count||0)/3;
+        }
+      });
+      return Math.round(t);
+    }
+    function updateStats(sizeVec){
+      const tris = current ? triCount(current).toLocaleString() : '—';
+      const sz   = sizeVec ? `${sizeVec.x.toFixed(2)} × ${sizeVec.y.toFixed(2)} × ${sizeVec.z.toFixed(2)} m` : '—';
+      document.getElementById('stats').textContent = `Tris: ${tris} | Size: ${sz} | GLB: ${humanBytes(lastGLBBytes)}`;
+    }
 
-  mat.userData._aoPatched = true;
-  mat.onBeforeCompile = (shader)=>{
-    shader.fragmentShader = 'uniform float uAoStrength;\n' + shader.fragmentShader;
-    shader.uniforms.uAoStrength = uRef;
+    /* ---------- AO: MULTIPLY puro sobre diffuseColor (sin pow ni mix) ---------- */
+    function patchAlbedoAO(mat, strength, enabled){
+      if(!enabled){
+        if(mat.userData._aoPatched){
+          delete mat.onBeforeCompile;
+          delete mat.userData._aoPatched;
+          delete mat.userData._uAo;
+          mat.needsUpdate = true;
+        }
+        return;
+      }
+      const uRef = mat.userData._uAo || (mat.userData._uAo = { value: strength });
+      uRef.value = strength;
 
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <aomap_fragment>',
+      mat.userData._aoPatched = true;
+      mat.onBeforeCompile = (shader)=>{
+        shader.fragmentShader = 'uniform float uAoStrength;\n' + shader.fragmentShader;
+        shader.uniforms.uAoStrength = uRef;
+
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <aomap_fragment>',
 `#ifdef USE_AOMAP
   float ambientOcclusion = texture2D( aoMap, vAoMapUv ).r;
 #else
   float ambientOcclusion = 1.0;
 #endif
 `
-    );
+        );
 
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <output_fragment>',
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <output_fragment>',
 `float aoFactor = clamp( ambientOcclusion / (1.0 + uAoStrength), 0.0, 1.0 );
 diffuseColor.rgb *= aoFactor;
 #include <output_fragment>`
-    );
-  };
-  mat.needsUpdate = true;
-}
-function applyAOtoScene(strength, enabled){
-  if(!current) return;
-  current.traverse(o=>{
-    if(!o.isMesh) return;
-    const mats = Array.isArray(o.material)? o.material : [o.material];
-    mats.forEach(m=>{
-      if(!(m && (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial))) return;
-      if(m.userData?._aoPatched && m.userData._uAo){
-        m.userData._uAo.value = strength;
-        m.needsUpdate = true;
-      } else {
-        patchAlbedoAO(m, strength, enabled);
-      }
-    });
-  });
-}
-
-/* ---------- helpers: parent hardware → door root (manteniendo world transform) ---------- */
-// CAMBIO: versión robusta que preserva TRS con escalas no uniformes/reflexiones
-function reparentKeepWorld(child, newParent){
-  child.updateMatrixWorld(true);
-  const childWorld = child.matrixWorld.clone();
-
-  newParent.updateMatrixWorld(true);
-  newParent.add(child);
-
-  const invParentWorld = newParent.matrixWorld.clone().invert();
-  const local = new THREE.Matrix4().multiplyMatrices(invParentWorld, childWorld);
-  local.decompose(child.position, child.quaternion, child.scale);
-  child.updateMatrixWorld(true);
-}
-
-// CAMBIO: extracción de índice más precisa para herrajes
-function extractIndex(name){
-  if(!name) return null;
-  // Priorizar número después de "door"
-  let match = name.match(/door(\d+)/i);
-  if(match) return match[1];
-  // Si no, priorizar número después de "panel"
-  match = name.match(/panel(\d+)/i);
-  if(match) return match[1];
-  // Si no, usar el último número en el nombre
-  match = name.match(/(\d+)(?!.*\d)/);
-  return match ? match[1] : null;
-}
-
-/* ---------- puertas ---------- */
-// Rotatorias: leftpanelX / rightpanelX (sin sufijo open/closed)
-// Variantes: *_closedleftpanelX y *_openleftpanelX  (y rightpanel)
-function findDoorPanels(nodes){
-  const panels = nodes.filter(o => /(leftpanel|rightpanel)\d+$/i.test(o.name) && !/_open|_closed/i.test(o.name));
-  return panels.map(o=>{
-    const left = /leftpanel/i.test(o.name);
-    o.userData.closedQ = o.quaternion.clone();
-    o.userData.sign    = left ? +1 : -1; // +Y izq, -Y der
-    return o;
-  });
-}
-function findDoorVariantPairs(nodes){
-  const map = new Map();
-  nodes.forEach(o=>{
-    const m = o.name.match(/_(open|closed)(leftpanel|rightpanel)(\d+)$/i);
-    if(!m) return;
-    const state = m[1].toLowerCase();
-    const side  = m[2].toLowerCase();
-/* ---------- helpers: extracción de side ---------- */
-function extractSide(name){
-  if(!name) return null;
-  if(/leftpanel/i.test(name) || /_left/i.test(name)) return 'left';
-  if(/rightpanel/i.test(name) || /_right/i.test(name)) return 'right';
-  return null;
-}
-
-/* ---------- helpers para raíces de puerta y selección de root visible ---------- */
-function getDoorRootsByIndex(idx, sidePref){
-  const roots = [];
-  // paneles rotatorios
-  doorPanels.forEach(d=>{
-    const di = extractIndex(d.name);
-    const side = extractSide(d.name);
-    if(String(di) === String(idx) && (!sidePref || sidePref===side)) roots.push(d);
-  });
-  // variantes open/closed
-  doorVariantPairs.forEach(pair=>{
-    const { open, closed } = pair;
-    [open, closed].filter(Boolean).forEach(n=>{
-      const ni = extractIndex(n.name);
-      const side = extractSide(n.name);
-      if(String(ni) === String(idx) && (!sidePref || sidePref===side)) roots.push(n);
-    });
-  });
-  return roots;
-}
-function pickPreferredDoorRoot(idx, sidePref){
-  const roots = getDoorRootsByIndex(idx, sidePref);
-  if(!roots.length){
-    // Relajar side si no hubo match estricto
-    const anySide = getDoorRootsByIndex(idx, null);
-    if(!anySide.length) return null;
-    const visibleAny = anySide.find(r => r.visible === true);
-    return visibleAny || anySide[0];
-  }
-  const visible = roots.find(r => r.visible === true);
-  return visible || roots[0];
-}
-
-/* ---------- reparent de herrajes robusto y variante-aware (con side) ---------- */
-function reparentHardwareToDoors(nodes, _doorPanels){
-  const hardware = nodes.filter(o => /(handle|hinge|knob|hardware)/i.test(o.name));
-  hardware.forEach(h=>{
-    const idx      = extractIndex(h.name);
-    const sidePref = extractSide(h.name); // <— now aware: left/right
-
-    let target = (idx!=null) ? pickPreferredDoorRoot(idx, sidePref) : null;
-
-    if(!target){
-      // fallback por cercanía a panel rotatorio (mismo side si es posible)
-      let candidates = _doorPanels;
-      if(sidePref){
-        const filtered = _doorPanels.filter(d=> extractSide(d.name)===sidePref);
-        if(filtered.length) candidates = filtered;
-      }
-      let best=null, bestDist=Infinity;
-      const hp = new THREE.Vector3(); new THREE.Box3().setFromObject(h).getCenter(hp);
-      candidates.forEach(d=>{
-        const dp = new THREE.Vector3(); new THREE.Box3().setFromObject(d).getCenter(dp);
-        const dist = hp.distanceTo(dp);
-        if(dist<bestDist){ bestDist=dist; best=d; }
+        );
+      };
+      mat.needsUpdate = true;
+    }
+    function applyAOtoScene(strength, enabled){
+      if(!current) return;
+      current.traverse(o=>{
+        if(!o.isMesh) return;
+        const mats = Array.isArray(o.material)? o.material : [o.material];
+        mats.forEach(m=>{
+          if(!(m && (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial))) return;
+          if(m.userData?._aoPatched && m.userData._uAo){
+            m.userData._uAo.value = strength;
+            m.needsUpdate = true;
+          } else {
+            patchAlbedoAO(m, strength, enabled);
+          }
+        });
       });
-      target = best;
     }
 
-    if(target && h.parent !== target) reparentKeepWorld(h, target);
-  });
-}
+    /* ---------- helpers: transform parenting ---------- */
+    function reparentKeepWorld(child, newParent){
+      child.updateMatrixWorld(true);
+      const childWorld = child.matrixWorld.clone();
 
-/* ---------- placing ---------- */
-function place(root){
-  // Ocultar colliders y techo por defecto
-  root.traverse(o=>{
-    if(o.isMesh && /collider/i.test(o.name)) o.visible=false;
-    if(o.isMesh && /^ceiling\d*$/i.test(o.name)) o.visible=false;
-  });
+      newParent.updateMatrixWorld(true);
+      newParent.add(child);
 
-  // centrar / apoyar
-  new THREE.Box3().setFromObject(root).getCenter(root.position).multiplyScalar(-1);
-  const box  = new THREE.Box3().setFromObject(root);
-  const size = box.getSize(new THREE.Vector3());
-  root.position.y -= box.min.y;
+      const invParentWorld = newParent.matrixWorld.clone().invert();
+      const local = new THREE.Matrix4().multiplyMatrices(invParentWorld, childWorld);
+      local.decompose(child.position, child.quaternion, child.scale);
+      child.updateMatrixWorld(true);
+    }
 
-  // recolectar
-  allNodes = []; root.traverse(o=>{ if(o.name) allNodes.push(o); });
-  ceilings  = allNodes.filter(o => /^ceiling\d*$/i.test(o.name));
-  wallRoots = allNodes.filter(o => /^wall\d+$/i.test(o.name));
+    function extractIndex(name){
+      if(!name) return null;
+      let match = name.match(/door(\d+)/i);
+      if(match) return match[1];
+      match = name.match(/panel(\d+)/i);
+      if(match) return match[1];
+      match = name.match(/(\d+)(?!.*\d)/);
+      return match ? match[1] : null;
+    }
 
-  // puertas rotatorias & variantes
-  doorPanels       = findDoorPanels(allNodes);
-  doorVariantPairs = findDoorVariantPairs(allNodes);
+    function extractSide(name){
+      if(!name) return null;
+      if(/leftpanel/i.test(name) || /_left/i.test(name)) return 'left';
+      if(/rightpanel/i.test(name) || /_right/i.test(name)) return 'right';
+      return null;
+    }
 
-  // reparent hardware → panel raíz (para que acompañen la rotación)
-  reparentHardwareToDoors(allNodes, doorPanels);
+    /* ---------- puertas ---------- */
+    // Rotatorias: leftpanelX / rightpanelX (sin sufijo open/closed)
+    // Variantes: *_closedleftpanelX y *_openleftpanelX (y rightpanel)
+    function findDoorPanels(nodes){
+      const panels = nodes.filter(o => /(leftpanel|rightpanel)\d+$/i.test(o.name) && !/_open|_closed/i.test(o.name));
+      return panels.map(o=>{
+        const left = /leftpanel/i.test(o.name);
+        o.userData.closedQ = o.quaternion.clone();
+        o.userData.sign    = left ? +1 : -1; // +Y izq, -Y der
+        return o;
+      });
+    }
+    function findDoorVariantPairs(nodes){
+      const map = new Map();
+      nodes.forEach(o=>{
+        const m = o.name.match(/_(open|closed)(leftpanel|rightpanel)(\d+)$/i);
+        if(!m) return;
+        const state = m[1].toLowerCase();
+        const side  = m[2].toLowerCase();
+        const idx   = m[3];
+        const key = `${side}-${idx}`;
+        if(!map.has(key)) map.set(key, { open:null, closed:null });
+        map.get(key)[state] = o;
+      });
+      return Array.from(map.values()).filter(p => p.open || p.closed);
+    }
 
-// PATCH START
-  // Asegurar que solo haya una variante visible por puerta (según toggle inicial)
-  enforceDoorVariantExclusivity();
-// Re-emparentar herrajes ahora que la variante visible está definida
-  reparentHardwareToDoors(allNodes, doorPanels);
-// PATCH END
+    function enforceDoorVariantExclusivity(defaultOpen){
+      const openFlag = (defaultOpen != null)
+        ? !!defaultOpen
+        : !!document.getElementById('doorsToggle')?.checked;
 
-  // FIX AO: si hay aoMap pero no uv2, clonar uv -> uv2
-  root.traverse(o=>{
-    if (!o.isMesh) return;
-    const g = o.geometry;
-    const mats = Array.isArray(o.material) ? o.material : [o.material];
-    mats.forEach(m=>{
-      if (m && m.aoMap && g && !g.getAttribute('uv2') && g.getAttribute('uv')) {
-        const uv = g.getAttribute('uv');
-        g.setAttribute('uv2', new THREE.BufferAttribute(uv.array, 2, uv.normalized));
-        g.attributes.uv2.needsUpdate = true;
+      doorVariantPairs.forEach(({open, closed})=>{
+        if(open && closed){
+          open.visible   = openFlag;
+          closed.visible = !openFlag;
+        } else if(open){
+          open.visible   = openFlag;
+        } else if(closed){
+          closed.visible = !openFlag;
+        }
+      });
+    }
+
+    function getDoorRootsByIndex(idx, sidePref){
+      const roots = [];
+      // paneles rotatorios
+      doorPanels.forEach(d=>{
+        const di = extractIndex(d.name);
+        const side = extractSide(d.name);
+        if(String(di) === String(idx) && (!sidePref || sidePref===side)) roots.push(d);
+      });
+      // variantes open/closed
+      doorVariantPairs.forEach(pair=>{
+        const { open, closed } = pair;
+        [open, closed].filter(Boolean).forEach(n=>{
+          const ni = extractIndex(n.name);
+          const side = extractSide(n.name);
+          if(String(ni) === String(idx) && (!sidePref || sidePref===side)) roots.push(n);
+        });
+      });
+      return roots;
+    }
+    function pickPreferredDoorRoot(idx, sidePref){
+      const roots = getDoorRootsByIndex(idx, sidePref);
+      if(!roots.length){
+        const anySide = getDoorRootsByIndex(idx, null);
+        if(!anySide.length) return null;
+        const visibleAny = anySide.find(r => r.visible === true);
+        return visibleAny || anySide[0];
       }
+      const visible = roots.find(r => r.visible === true);
+      return visible || roots[0];
+    }
+
+    function reparentHardwareToDoors(nodes, _doorPanels){
+      const hardware = nodes.filter(o => /(handle|hinge|knob|hardware)/i.test(o.name));
+      hardware.forEach(h=>{
+        const idx      = extractIndex(h.name);
+        const sidePref = extractSide(h.name);
+
+        let target = (idx!=null) ? pickPreferredDoorRoot(idx, sidePref) : null;
+
+        if(!target){
+          // fallback por cercanía a panel rotatorio (filtrando por side si se puede)
+          let candidates = _doorPanels;
+          if(sidePref){
+            const filtered = _doorPanels.filter(d=> extractSide(d.name)===sidePref);
+            if(filtered.length) candidates = filtered;
+          }
+          let best=null, bestDist=Infinity;
+          const hp = new THREE.Vector3(); new THREE.Box3().setFromObject(h).getCenter(hp);
+          candidates.forEach(d=>{
+            const dp = new THREE.Vector3(); new THREE.Box3().setFromObject(d).getCenter(dp);
+            const dist = hp.distanceTo(dp);
+            if(dist<bestDist){ bestDist=dist; best=d; }
+          });
+          target = best;
+        }
+
+        if(target && h.parent !== target) reparentKeepWorld(h, target);
+      });
+    }
+
+    /* ---------- placing ---------- */
+    function place(root){
+      // Ocultar colliders y techo por defecto
+      root.traverse(o=>{
+        if(o.isMesh && /collider/i.test(o.name)) o.visible=false;
+        if(o.isMesh && /^ceiling\d*$/i.test(o.name)) o.visible=false;
+      });
+
+      // centrar / apoyar
+      new THREE.Box3().setFromObject(root).getCenter(root.position).multiplyScalar(-1);
+      const box  = new THREE.Box3().setFromObject(root);
+      const size = box.getSize(new THREE.Vector3());
+      root.position.y -= box.min.y;
+
+      // recolectar
+      allNodes = []; root.traverse(o=>{ if(o.name) allNodes.push(o); });
+      ceilings  = allNodes.filter(o => /^ceiling\d*$/i.test(o.name));
+      wallRoots = allNodes.filter(o => /^wall\d+$/i.test(o.name));
+
+      // puertas rotatorias & variantes
+      doorPanels       = findDoorPanels(allNodes);
+      doorVariantPairs = findDoorVariantPairs(allNodes);
+
+      // exclusividad de variantes y herrajes
+      enforceDoorVariantExclusivity();
+      reparentHardwareToDoors(allNodes, doorPanels);
+
+      // FIX AO: si hay aoMap pero no uv2, clonar uv -> uv2
+      root.traverse(o=>{
+        if (!o.isMesh) return;
+        const g = o.geometry;
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        mats.forEach(m=>{
+          if (m && m.aoMap && g && !g.getAttribute('uv2') && g.getAttribute('uv')) {
+            const uv = g.getAttribute('uv');
+            g.setAttribute('uv2', new THREE.BufferAttribute(uv.array, 2, uv.normalized));
+            g.attributes.uv2.needsUpdate = true;
+          }
+        });
+      });
+
+      current = root; scene.add(root);
+
+      // cámara + stats
+      const maxDim = Math.max(size.x,size.y,size.z);
+      camera.position.setScalar(maxDim*1.6).setY(maxDim*0.8);
+      controls.target.copy(new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3()));
+      controls.update();
+
+      applyAOtoScene(parseFloat(aoStrength.value), aoEnable.checked);
+      updateStats(size);
+      countAoMaps(root);
+    }
+
+    /* ---------- doors actions ---------- */
+    function setDoorRotation(o, open){
+      const amt = open ? 1 : 0;
+      const rad = THREE.MathUtils.degToRad(MAX_DOOR_DEG * o.userData.sign * THREE.MathUtils.clamp(amt,0,1));
+      o.quaternion.copy(o.userData.closedQ);
+      o.rotateY(rad);
+    }
+    function toggleDoors(open){
+      // Rotatorias
+      doorPanels.forEach(o=> setDoorRotation(o, open));
+
+      // Variantes
+      doorVariantPairs.forEach(pair=>{
+        const {open:openNode, closed:closedNode} = pair;
+        if(openNode)  openNode.visible  = !!open;
+        if(closedNode)closedNode.visible= !open;
+      });
+
+      // Reubicar herrajes al nodo visible (si hay variantes)
+      if(allNodes?.length){
+        const hardware = allNodes.filter(o => /(handle|hinge|knob|hardware)/i.test(o.name));
+        hardware.forEach(h=>{
+          const idx = extractIndex(h.name);
+          const sidePref = extractSide(h.name);
+          if(idx==null) return;
+          const target = pickPreferredDoorRoot(idx, sidePref);
+          if(target && h.parent !== target) reparentKeepWorld(h, target);
+        });
+      }
+    }
+
+    /* ---------- auto-hide wall (frente a la cámara) ---------- */
+    const ray = new THREE.Raycaster();
+    function wallRootOf(obj){ let p=obj; while(p){ if(/^wall\d+$/i.test(p.name)) return p; p=p.parent; } return null; }
+    function sampleFrontWalls(){
+      // Solo ocultamos **una** pared: la más cercana hacia el target
+      if(!wallRoots?.length) return new Set();
+
+      let closest = null;
+      let closestDist = Infinity;
+
+      const distToTarget = camera.position.distanceTo(controls.target);
+      const samples = [ {x:0,y:0},{x:0.14,y:0},{x:-0.14,y:0},{x:0,y:0.14},{x:0,y:-0.14} ];
+
+      for(const ndc of samples){
+        ray.setFromCamera(ndc, camera);
+        const hits = ray.intersectObjects(wallRoots, true);
+        if(hits.length){
+          const h = hits[0];
+          if(h.distance < distToTarget*0.995 && h.distance < closestDist){
+            closest = wallRootOf(h.object);
+            closestDist = h.distance;
+          }
+        }
+      }
+      return closest ? new Set([closest]) : new Set();
+    }
+    function updateAutoHide(){
+      if(!document.getElementById('autoHideToggle').checked || !current) return;
+      const front = sampleFrontWalls();
+      for(const wr of Array.from(lastHiddenWalls)){
+        if(!front.has(wr)){ wr.visible = true; lastHiddenWalls.delete(wr); }
+      }
+      for(const wr of front){
+        if(!lastHiddenWalls.has(wr)){ wr.visible = false; lastHiddenWalls.add(wr); }
+      }
+    }
+
+    /* ---------- AO debug & counters ---------- */
+    function countAoMaps(root){
+      let count=0;
+      root.traverse(o=>{
+        if(!o.isMesh) return;
+        const mats = Array.isArray(o.material)?o.material:[o.material];
+        mats.forEach(m=>{ if(m && m.aoMap) count++; });
+      });
+      console.log(`AO: ${count} materiales con aoMap`);
+    }
+    function setAODebug(enabled){
+      if(!current) return;
+      current.traverse(o=>{
+        if(!o.isMesh) return;
+        if(enabled){
+          if(o.userData._origMat) return;
+          const mats = Array.isArray(o.material)?o.material:[o.material];
+          const src = mats.find(m=>m && m.aoMap);
+          const dbg = new THREE.MeshBasicMaterial({ color: 0xffffff });
+          if(src && src.aoMap) dbg.map = src.aoMap; else dbg.color.set(0x777777);
+          o.userData._origMat = o.material;
+          o.material = dbg; o.material.needsUpdate = true;
+        }else{
+          if(o.userData._origMat){
+            o.material = o.userData._origMat;
+            delete o.userData._origMat;
+            o.material.needsUpdate = true;
+          }
+        }
+      });
+    }
+
+    /* ---------- loading (con tamaño de GLB) ---------- */
+    async function headSize(url){
+      try{
+        const r = await fetch(url, { method:'HEAD', mode:'cors' });
+        const v = r.headers.get('content-length');
+        return v ? parseInt(v) : null;
+      }catch{ return null; }
+    }
+    function loadFromURL(url){
+      setMsg('Loading…'); clearModel(); lastGLBBytes = null;
+      headSize(url).then(sz => { if(sz) { lastGLBBytes = sz; updateStats(); } });
+      loader.load(url, g=>{ place(g.scene); setMsg('Loaded'); },
+        xhr=>{ if(xhr.total){ lastGLBBytes = xhr.total; updateStats(); setMsg(`Loading ${(xhr.loaded/xhr.total*100).toFixed(0)}%`);} },
+        err=>{ console.error(err); setMsg('Error loading model'); });
+    }
+    function loadBlob(file){
+      setMsg('Loading local file…'); clearModel();
+      lastGLBBytes = file.size; updateStats();
+      const url = URL.createObjectURL(file);
+      loader.load(url, g=>{ place(g.scene); setMsg(file.name); URL.revokeObjectURL(url); },
+        undefined, e=>{ console.error(e); setMsg('Error with local file'); });
+    }
+
+    /* ---------- UI ---------- */
+    const urlInput = document.getElementById('url');
+    document.getElementById('loadBtn').onclick = ()=>{ const u=urlInput.value.trim(); if(u) loadFromURL(u); };
+    const fileInput = document.getElementById('fileInput');
+    document.getElementById('fileBtn').onclick = ()=>{ fileInput.value=''; fileInput.click(); };
+    fileInput.onchange = ()=>{ const f=fileInput.files?.[0]; if(f) loadBlob(f); };
+
+    document.getElementById('doorsToggle').onchange = e=> toggleDoors(e.target.checked);
+    const aoEnable   = document.getElementById('aoEnable');
+    const aoStrength = document.getElementById('aoStrength');
+    document.getElementById('aoDebug').onchange = e=> setAODebug(e.target.checked);
+    aoEnable.onchange   = ()=> applyAOtoScene(parseFloat(aoStrength.value), aoEnable.checked);
+    aoStrength.oninput  = ()=> applyAOtoScene(parseFloat(aoStrength.value), aoEnable.checked);
+
+    document.getElementById('hideCeilingToggle').onchange = e=>{
+      ceilings.forEach(c=> c.visible = !e.target.checked);
+    };
+
+    document.getElementById('hdrSelect').onchange = (e)=>{
+      const v=e.target.value;
+      if(!v){ scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture; return; }
+      new RGBELoader().load(v, tex=>{
+        const env = pmrem.fromEquirectangular(tex).texture;
+        scene.environment = env;
+        tex.dispose();
+      }, undefined, err=> console.warn('HDR load error', err));
+    };
+
+    /* ---------- drag & drop ---------- */
+    const drop=document.getElementById('drop');
+    ['dragenter','dragover','dragleave','drop'].forEach(ev=>{
+      window.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); }, false);
     });
-  });
-
-  current = root; scene.add(root);
-
-  // cámara + stats
-  const maxDim = Math.max(size.x,size.y,size.z);
-  camera.position.setScalar(maxDim*1.6).setY(maxDim*0.8);
-  controls.target.copy(new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3()));
-  controls.update();
-
-  applyAOtoScene(parseFloat(aoStrength.value), aoEnable.checked);
-  updateStats(size);
-  countAoMaps(root);
-}
-
-/* ---------- doors actions ---------- */
-function setDoorRotation(o, open){ // 0/1
-  const amt = open ? 1 : 0;
-  const rad = THREE.MathUtils.degToRad(MAX_DOOR_DEG * o.userData.sign * THREE.MathUtils.clamp(amt,0,1));
-  o.quaternion.copy(o.userData.closedQ);
-  o.rotateY(rad);
-}
-function toggleDoors(open){
-  // Rotatorias:
-  doorPanels.forEach(o=> setDoorRotation(o, open));
-
-  // Variantes (mostrar open / ocultar closed, o viceversa)
-  doorVariantPairs.forEach(pair=>{
-    const {open:openNode, closed:closedNode} = pair;
-    if(openNode)  openNode.visible  = !!open;
-    if(closedNode)closedNode.visible= !open;
-  });
-
-  // CAMBIO: reubicar herrajes al nodo visible si la puerta es por variantes
-  if(allNodes?.length){
-    const hardware = allNodes.filter(o => /(handle|hinge|knob|hardware)/i.test(o.name));
-    hardware.forEach(h=>{
-      const idx = extractIndex(h.name);
-      if(idx==null) return;
-      const target = pickPreferredDoorRoot(idx);
-      if(target && h.parent !== target) reparentKeepWorld(h, target);
+    window.addEventListener('dragenter', ()=> drop.style.display='flex');
+    window.addEventListener('dragover',  ()=> drop.style.display='flex');
+    window.addEventListener('dragleave', e=>{
+      if(e.clientX<=0||e.clientY<=0||e.clientX>=innerWidth||e.clientY>=innerHeight){ drop.style.display='none'; }
     });
-  }
-}
+    function handleDrop(e){ drop.style.display='none'; const f=e.dataTransfer?.files?.[0]; if(f) loadBlob(f); }
+    drop.addEventListener('drop', handleDrop);
+    document.addEventListener('drop', handleDrop);
 
-/* ---------- auto-hide wall (frente a la cámara) ---------- */
-const ray = new THREE.Raycaster();
-function wallRootOf(obj){ let p=obj; while(p){ if(/^wall\d+$/i.test(p.name)) return p; p=p.parent; } return null; }
-function sampleFrontWalls(){
-function sampleFrontWalls(){
-  // Solo ocultamos **una** pared: la más cercana en dirección al target,
-  // para evitar que desaparezcan a la vez la pared cercana y la lejana.
-  if(!wallRoots?.length) return new Set();
+    /* ---------- ?model= ---------- */
+    const modelURL=new URLSearchParams(location.search).get('model');
+    if(modelURL){ urlInput.value=modelURL; loadFromURL(modelURL); }
 
-  let closest = null;
-  let closestDist = Infinity;
-
-  const distToTarget = camera.position.distanceTo(controls.target);
-  // Un poco más separados que antes para mayor estabilidad angular
-  const samples = [ {x:0,y:0},{x:0.14,y:0},{x:-0.14,y:0},{x:0,y:0.14},{x:0,y:-0.14} ];
-
-  for(const ndc of samples){
-    ray.setFromCamera(ndc, camera);
-    const hits = ray.intersectObjects(wallRoots, true);
-    if(hits.length){
-      const h = hits[0]; // el más cercano para este rayo
-      // Solo consideramos hits claramente frente al target
-      if(h.distance < distToTarget*0.995 && h.distance < closestDist){
-        closest = wallRootOf(h.object);
-        closestDist = h.distance;
-      }
+    /* ---------- resize & loop ---------- */
+    function resize(){
+      const w=innerWidth,h=innerHeight;
+      renderer.setSize(w,h,false);
+      camera.aspect=w/h; camera.updateProjectionMatrix();
     }
-  }
-  return closest ? new Set([closest]) : new Set();
-}
-function updateAutoHide(){
-  if(!document.getElementById('autoHideToggle').checked || !current) return;
-  const front = sampleFrontWalls();
-  for(const wr of Array.from(lastHiddenWalls)){
-    if(!front.has(wr)){ wr.visible = true; lastHiddenWalls.delete(wr); }
-  }
-  for(const wr of front){
-    if(!lastHiddenWalls.has(wr)){ wr.visible = false; lastHiddenWalls.add(wr); }
-  }
-}
+    addEventListener('resize', resize);
+    resize();
 
-/* ---------- AO debug & counters ---------- */
-function countAoMaps(root){
-  let count=0;
-  root.traverse(o=>{
-    if(!o.isMesh) return;
-    const mats = Array.isArray(o.material)?o.material:[o.material];
-    mats.forEach(m=>{ if(m && m.aoMap) count++; });
-  });
-  console.log(`AO: ${count} materiales con aoMap`);
-}
-function setAODebug(enabled){
-  if(!current) return;
-  current.traverse(o=>{
-    if(!o.isMesh) return;
-    if(enabled){
-      if(o.userData._origMat) return;
-      const mats = Array.isArray(o.material)?o.material:[o.material];
-      const src = mats.find(m=>m && m.aoMap);
-      const dbg = new THREE.MeshBasicMaterial({ color: 0xffffff });
-      if(src && src.aoMap) dbg.map = src.aoMap; else dbg.color.set(0x777777);
-      o.userData._origMat = o.material;
-      o.material = dbg; o.material.needsUpdate = true;
-    }else{
-      if(o.userData._origMat){
-        o.material = o.userData._origMat;
-        delete o.userData._origMat;
-        o.material.needsUpdate = true;
-      }
-    }
-  });
-}
-
-/* ---------- loading (con tamaño de GLB) ---------- */
-async function headSize(url){
-  try{
-    const r = await fetch(url, { method:'HEAD', mode:'cors' });
-    const v = r.headers.get('content-length');
-    return v ? parseInt(v) : null;
-  }catch{ return null; }
-}
-function loadFromURL(url){
-  setMsg('Loading…'); clearModel(); lastGLBBytes = null;
-  headSize(url).then(sz => { if(sz) { lastGLBBytes = sz; updateStats(); } });
-  loader.load(url, g=>{ place(g.scene); setMsg('Loaded'); },
-    xhr=>{ if(xhr.total){ lastGLBBytes = xhr.total; updateStats(); setMsg(`Loading ${(xhr.loaded/xhr.total*100).toFixed(0)}%`);} },
-    err=>{ console.error(err); setMsg('Error loading model'); });
-}
-function loadBlob(file){
-  setMsg('Loading local file…'); clearModel();
-  lastGLBBytes = file.size; updateStats();
-  const url = URL.createObjectURL(file);
-  loader.load(url, g=>{ place(g.scene); setMsg(file.name); URL.revokeObjectURL(url); },
-    undefined, e=>{ console.error(e); setMsg('Error with local file'); });
-}
-
-/* ---------- UI ---------- */
-const urlInput = document.getElementById('url');
-document.getElementById('loadBtn').onclick = ()=>{ const u=urlInput.value.trim(); if(u) loadFromURL(u); };
-const fileInput = document.getElementById('fileInput');
-document.getElementById('fileBtn').onclick = ()=>{ fileInput.value=''; fileInput.click(); };
-fileInput.onchange = ()=>{ const f=fileInput.files?.[0]; if(f) loadBlob(f); };
-
-document.getElementById('doorsToggle').onchange = e=> toggleDoors(e.target.checked);
-const aoEnable   = document.getElementById('aoEnable');
-const aoStrength = document.getElementById('aoStrength');
-document.getElementById('aoDebug').onchange = e=> setAODebug(e.target.checked);
-aoEnable.onchange   = ()=> applyAOtoScene(parseFloat(aoStrength.value), aoEnable.checked);
-aoStrength.oninput  = ()=> applyAOtoScene(parseFloat(aoStrength.value), aoEnable.checked);
-
-document.getElementById('hideCeilingToggle').onchange = e=>{
-  ceilings.forEach(c=> c.visible = !e.target.checked);
-};
-
-document.getElementById('hdrSelect').onchange = (e)=>{
-  const v=e.target.value;
-  if(!v){ scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture; return; }
-  new RGBELoader().load(v, tex=>{
-    const env = pmrem.fromEquirectangular(tex).texture;
-    scene.environment = env;
-    tex.dispose();
-  }, undefined, err=> console.warn('HDR load error', err));
-};
-
-/* ---------- drag & drop ---------- */
-const drop=document.getElementById('drop');
-['dragenter','dragover','dragleave','drop'].forEach(ev=>{
-  window.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); }, false);
-});
-window.addEventListener('dragenter', ()=> drop.style.display='flex');
-window.addEventListener('dragover',  ()=> drop.style.display='flex');
-window.addEventListener('dragleave', e=>{
-  if(e.clientX<=0||e.clientY<=0||e.clientX>=innerWidth||e.clientY>=innerHeight){ drop.style.display='none'; }
-});
-function handleDrop(e){ drop.style.display='none'; const f=e.dataTransfer?.files?.[0]; if(f) loadBlob(f); }
-drop.addEventListener('drop', handleDrop);
-document.addEventListener('drop', handleDrop);
-
-/* ---------- ?model= ---------- */
-const modelURL=new URLSearchParams(location.search).get('model');
-if(modelURL){ urlInput.value=modelURL; loadFromURL(modelURL); }
-
-/* ---------- resize & loop ---------- */
-function resize(){
-  const w=innerWidth,h=innerHeight;
-  renderer.setSize(w,h,false);
-  camera.aspect=w/h; camera.updateProjectionMatrix();
-}
-addEventListener('resize', resize);
-resize();
-
-renderer.setAnimationLoop(()=>{
-  controls.update();
-  if(document.getElementById('autoHideToggle').checked) updateAutoHide();
-  renderer.render(scene,camera);
-});
-</script>
+    renderer.setAnimationLoop(()=>{
+      controls.update();
+      if(document.getElementById('autoHideToggle').checked) updateAutoHide();
+      renderer.render(scene,camera);
+    });
+  </script>
 </body>
 </html>
