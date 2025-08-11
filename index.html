@@ -329,6 +329,13 @@ function place(root){
   // reparent hardware → panel raíz (para que acompañen la rotación)
   reparentHardwareToDoors(allNodes, doorPanels);
 
+// PATCH START
+  // Asegurar que solo haya una variante visible por puerta (según toggle inicial)
+  enforceDoorVariantExclusivity();
+// Re-emparentar herrajes ahora que la variante visible está definida
+  reparentHardwareToDoors(allNodes, doorPanels);
+// PATCH END
+
   // FIX AO: si hay aoMap pero no uv2, clonar uv -> uv2
   root.traverse(o=>{
     if (!o.isMesh) return;
@@ -390,21 +397,31 @@ function toggleDoors(open){
 const ray = new THREE.Raycaster();
 function wallRootOf(obj){ let p=obj; while(p){ if(/^wall\d+$/i.test(p.name)) return p; p=p.parent; } return null; }
 function sampleFrontWalls(){
-  const result = new Set();
-  if(!wallRoots?.length) return result;
+function sampleFrontWalls(){
+  // Solo ocultamos **una** pared: la más cercana en dirección al target,
+  // para evitar que desaparezcan a la vez la pared cercana y la lejana.
+  if(!wallRoots?.length) return new Set();
+
+  let closest = null;
+  let closestDist = Infinity;
+
   const distToTarget = camera.position.distanceTo(controls.target);
-  const samples = [ {x:0,y:0},{x:0.12,y:0},{x:-0.12,y:0},{x:0,y:0.12},{x:0,y:-0.12} ];
+  // Un poco más separados que antes para mayor estabilidad angular
+  const samples = [ {x:0,y:0},{x:0.14,y:0},{x:-0.14,y:0},{x:0,y:0.14},{x:0,y:-0.14} ];
+
   for(const ndc of samples){
     ray.setFromCamera(ndc, camera);
     const hits = ray.intersectObjects(wallRoots, true);
-    for(const h of hits){
-      if(h.distance < distToTarget*0.995){
-        const wr = wallRootOf(h.object);
-        if(wr){ result.add(wr); break; }
+    if(hits.length){
+      const h = hits[0]; // el más cercano para este rayo
+      // Solo consideramos hits claramente frente al target
+      if(h.distance < distToTarget*0.995 && h.distance < closestDist){
+        closest = wallRootOf(h.object);
+        closestDist = h.distance;
       }
     }
   }
-  return result;
+  return closest ? new Set([closest]) : new Set();
 }
 function updateAutoHide(){
   if(!document.getElementById('autoHideToggle').checked || !current) return;
