@@ -1,0 +1,28 @@
+<!doctype html><meta charset="utf-8">
+<title>DnD test</title>
+<style>
+  html,body{height:100%;margin:0;background:#111;color:#eee;font:14px/1.4 system-ui}
+  #log{position:fixed;inset:0;padding:16px;white-space:pre-wrap}
+  #drop{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+        border:2px dashed #2a2f36;border-radius:16px;background:rgba(30,104,255,.08);
+        color:#cfe0ff;pointer-events:auto}
+</style>
+<div id="drop">Drop a .glb file here</div>
+<pre id="log">Waiting for drop…</pre>
+<script>
+  const log = (...a)=>{ document.getElementById('log').textContent = a.join(' ') };
+  function prevent(e){ e.preventDefault(); e.stopPropagation(); }
+  ['dragenter','dragover','dragleave','drop'].forEach(ev=>{
+    window.addEventListener(ev, prevent, false);
+    document.addEventListener(ev, prevent, false);
+    document.body.addEventListener(ev, prevent, false);
+  });
+  window.addEventListener('dragenter', ()=> document.getElementById('drop').style.display='flex');
+  window.addEventListener('dragover',  ()=> document.getElementById('drop').style.display='flex');
+  document.addEventListener('drop', (e)=>{
+    document.getElementById('drop').style.display='none';
+    const f = e.dataTransfer?.files?.[0];
+    if(!f){ log('Drop captured, but no file.'); return; }
+    log(`Dropped: ${f.name} (${f.type||'unknown'}), ${f.size} bytes`);
+  });
+</script>
