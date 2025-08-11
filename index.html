@@ -364,7 +364,7 @@ function buildAnimUI(){
   if(!animGroups.length) return;
   const side = document.getElementById('sidepanel');
   const wrap = document.createElement('details'); wrap.className='asset-anim card'; wrap.open=true;
-  const summary = document.createElement('summary'); summary.textContent='Anim'; wrap.appendChild(summary);
+  const summary = document.createElement('summary'); summary.textContent='Accionables'; wrap.appendChild(summary);
   const inner = document.createElement('div'); inner.className='anim-panel'; wrap.appendChild(inner);
   const info = document.createElement('div'); info.className='muted'; info.textContent='Shape keys por grupo (prefijo anim_)'; inner.appendChild(info);
   animGroups.forEach(group=>{
