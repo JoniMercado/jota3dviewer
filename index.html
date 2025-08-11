@@ -125,11 +125,7 @@ function updateStats(sizeVec){
   document.getElementById('stats').textContent = `Tris: ${tris} | Size: ${sz} | GLB: ${humanBytes(lastGLBBytes)}`;
 }
 
-/* ---------- AO: MULTIPLY puro sobre diffuseColor (sin pow ni mix) ---------- */
-/*  AO final = clamp( ambientOcclusion / (1.0 + strength), 0..1 )
-    Luego: diffuseColor.rgb *= AO final
-    - Afecta tanto color embebido como textura de albedo porque opera sobre diffuseColor final.
-*/
+/* ---------- AO ---------- */
 function patchAlbedoAO(mat, strength, enabled){
   if(!enabled){
     if(mat.userData._aoPatched){
@@ -184,7 +180,7 @@ function applyAOtoScene(strength, enabled){
   });
 }
 
-/* ---------- helpers: parent hardware → door root (manteniendo world transform) ---------- */
+/* ---------- helpers ---------- */
 function reparentKeepWorld(child, newParent){
   child.updateMatrixWorld(true);
   newParent.updateMatrixWorld(true);
@@ -200,8 +196,7 @@ function reparentKeepWorld(child, newParent){
   const invP = new THREE.Matrix4().compose(pPos, pQuat, pScl).invert();
   const mLocal = new THREE.Matrix4().multiplyMatrices(invP, new THREE.Matrix4().compose(wPos, wQuat, wScl));
 
-  const lPos = new THREE.Vector3(), lQuat = new THREE.Qua
-  ternion(), lScl = new THREE.Vector3();
+  const lPos = new THREE.Vector3(), lQuat = new THREE.Quaternion(), lScl = new THREE.Vector3();
   mLocal.decompose(lPos, lQuat, lScl);
 
   child.position.copy(lPos);
@@ -212,14 +207,12 @@ function reparentKeepWorld(child, newParent){
 function extractIndex(name){ const m = name?.match(/(\d+)/); return m ? m[1] : null; }
 
 /* ---------- puertas ---------- */
-// Rotatorias: leftpanelX / rightpanelX (sin sufijo open/closed)
-// Variantes: *_closedleftpanelX y *_openleftpanelX  (y rightpanel)
 function findDoorPanels(nodes){
   const panels = nodes.filter(o => /(leftpanel|rightpanel)\d+$/i.test(o.name) && !/_open|_closed/i.test(o.name));
   return panels.map(o=>{
     const left = /leftpanel/i.test(o.name);
     o.userData.closedQ = o.quaternion.clone();
-    o.userData.sign    = left ? +1 : -1; // +Y izq, -Y der
+    o.userData.sign    = left ? +1 : -1;
     return o;
   });
 }
@@ -245,11 +238,12 @@ function reparentHardwareToDoors(nodes, doorRoots){
     const idx = extractIndex(h.name);
     let target = idx!=null ? byIndex.get(String(idx)) : null;
     if(!target){
-      // fallback por cercanía
       let best=null, bestDist=Infinity;
       const hp = new THREE.Vector3(); new THREE.Box3().setFromObject(h).getCenter(hp);
-      doorRoots.forEach(d=>{ const dp = new THREE.Vector3(); new THREE.Box3().setFromObject(d).getCenter(dp);
-        const dist = hp.distanceTo(dp); if(dist<bestDist){ bestDist=dist; best=d; }});
+      doorRoots.forEach(d=>{
+        const dp = new THREE.Vector3(); new THREE.Box3().setFromObject(d).getCenter(dp);
+        const dist = hp.distanceTo(dp); if(dist<bestDist){ bestDist=dist; best=d; }
+      });
       target = best;
     }
     if(target && h.parent !== target) reparentKeepWorld(h, target);
@@ -258,31 +252,20 @@ function reparentHardwareToDoors(nodes, doorRoots){
 
 /* ---------- placing ---------- */
 function place(root){
-  // Ocultar colliders y techo por defecto
   root.traverse(o=>{
     if(o.isMesh && /collider/i.test(o.name)) o.visible=false;
     if(o.isMesh && /^ceiling\d*$/i.test(o.name)) o.visible=false;
   });
-
-  // centrar / apoyar
   new THREE.Box3().setFromObject(root).getCenter(root.position).multiplyScalar(-1);
   const box  = new THREE.Box3().setFromObject(root);
   const size = box.getSize(new THREE.Vector3());
   root.position.y -= box.min.y;
-
-  // recolectar
   allNodes = []; root.traverse(o=>{ if(o.name) allNodes.push(o); });
   ceilings  = allNodes.filter(o => /^ceiling\d*$/i.test(o.name));
   wallRoots = allNodes.filter(o => /^wall\d+$/i.test(o.name));
-
-  // puertas rotatorias & variantes
   doorPanels       = findDoorPanels(allNodes);
   doorVariantPairs = findDoorVariantPairs(allNodes);
-
-  // reparent hardware → panel raíz (para que acompañen la rotación)
   reparentHardwareToDoors(allNodes, doorPanels);
-
-  // FIX AO: si hay aoMap pero no uv2, clonar uv -> uv2
   root.traverse(o=>{
     if (!o.isMesh) return;
     const g = o.geometry;
@@ -295,31 +278,25 @@ function place(root){
       }
     });
   });
-
   current = root; scene.add(root);
-
-  // cámara + stats
   const maxDim = Math.max(size.x,size.y,size.z);
   camera.position.setScalar(maxDim*1.6).setY(maxDim*0.8);
   controls.target.copy(new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3()));
   controls.update();
-
   applyAOtoScene(parseFloat(aoStrength.value), aoEnable.checked);
   updateStats(size);
   countAoMaps(root);
 }
 
 /* ---------- doors actions ---------- */
-function setDoorRotation(o, open){ // 0/1
+function setDoorRotation(o, open){
   const amt = open ? 1 : 0;
   const rad = THREE.MathUtils.degToRad(MAX_DOOR_DEG * o.userData.sign * THREE.MathUtils.clamp(amt,0,1));
   o.quaternion.copy(o.userData.closedQ);
   o.rotateY(rad);
 }
 function toggleDoors(open){
-  // Rotatorias:
   doorPanels.forEach(o=> setDoorRotation(o, open));
-  // Variantes (mostrar open / ocultar closed, o viceversa)
   doorVariantPairs.forEach(pair=>{
     const {open:openNode, closed:closedNode} = pair;
     if(openNode)  openNode.visible  = !!open;
@@ -327,7 +304,7 @@ function toggleDoors(open){
   });
 }
 
-/* ---------- auto-hide wall (frente a la cámara) ---------- */
+/* ---------- auto-hide wall ---------- */
 const ray = new THREE.Raycaster();
 function wallRootOf(obj){ let p=obj; while(p){ if(/^wall\d+$/i.test(p.name)) return p; p=p.parent; } return null; }
 function sampleFrontWalls(){
@@ -390,7 +367,7 @@ function setAODebug(enabled){
   });
 }
 
-/* ---------- loading (con tamaño de GLB) ---------- */
+/* ---------- loading ---------- */
 async function headSize(url){
   try{
     const r = await fetch(url, { method:'HEAD', mode:'cors' });
