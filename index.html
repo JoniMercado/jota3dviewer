@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Room Viewer</title>
+<title>Room Viewer — v0.0.1</title>
 
 <!-- Import map para que "three" y addons funcionen en GitHub Pages -->
 <script type="importmap">
@@ -97,8 +97,8 @@ const loader = new GLTFLoader().setDRACOLoader(draco).setKTX2Loader(ktx2);
 
 /* ---------- state ---------- */
 let current=null, allNodes=[], doorPanels=[], ceilings=[], wallRoots=[];
-let lastHiddenWalls = new Set(); // para auto-hide
-let lastGLBBytes = null;         // peso del archivo GLB
+let lastHiddenWalls = new Set(); // auto-hide
+let lastGLBBytes = null;         // peso del GLB
 const MAX_DOOR_DEG = 90;
 
 /* ---------- utils ---------- */
@@ -142,7 +142,7 @@ function patchAlbedoAO(mat, strength, enabled){
     shader.fragmentShader = 'uniform float uAoStrength;\n' + shader.fragmentShader;
     shader.uniforms.uAoStrength = uRef;
 
-    // Solo obtenemos ambientOcclusion sin tocar la luz de three
+    // Leer AO sin tocar la iluminación del engine
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <aomap_fragment>',
 `#ifdef USE_AOMAP
@@ -152,7 +152,8 @@ function patchAlbedoAO(mat, strength, enabled){
 #endif
 `
     );
-    // Multiplicamos el albedo por AO con fuerza
+
+    // Multiplicar el ALBEDO por AO con fuerza
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <output_fragment>',
 `diffuseColor.rgb *= mix(1.0, ambientOcclusion, uAoStrength);
@@ -183,8 +184,8 @@ function place(root){
   // ocultar colliders
   root.traverse(o=>{ if(o.isMesh && /collider/i.test(o.name)) o.visible=false; });
 
-  // ocultar techo por defecto
-  root.traverse(o=>{ if(o.isMesh && /^ceiling\d*$/i.test(o.name)) o.visible = document.getElementById('hideCeilingToggle').checked ? false : true; });
+  // ocultar techos por defecto (checkbox empieza checked)
+  root.traverse(o=>{ if(o.isMesh && /^ceiling\d*$/i.test(o.name)) o.visible = false; });
 
   // centrar y apoyar
   new THREE.Box3().setFromObject(root).getCenter(root.position).multiplyScalar(-1);
@@ -196,11 +197,10 @@ function place(root){
   allNodes = [];
   root.traverse(o=>{ if(o.name) allNodes.push(o); });
 
-  // paredes raíz y techos
   ceilings  = allNodes.filter(o => /^ceiling\d*$/i.test(o.name));
   wallRoots = allNodes.filter(o => /^wall\d+$/i.test(o.name));
 
-  // puertas (paneles raíz, sin hijos)
+  // puertas (left/right panels) con pivote ya preparado en el glb
   const panels = allNodes.filter(o => /(leftpanel|rightpanel)\d+/i.test(o.name));
   doorPanels = panels.map(o=>{
     const left = /leftpanel/i.test(o.name);
@@ -209,26 +209,27 @@ function place(root){
     return o;
   });
 
-  // Fix uv2 si hay aoMap
+  // --- FIX AO: si hay aoMap pero no uv2, clonar uv -> uv2 ----
   root.traverse(o=>{
     if (!o.isMesh) return;
+    const g = o.geometry;
     const mats = Array.isArray(o.material) ? o.material : [o.material];
-    mats.forEach(mm=>{
-      if (mm && mm.aoMap && o.geometry && !o.geometry.attributes.uv2 && o.geometry.attributes.uv) {
-        o.geometry.setAttribute('uv2', o.geometry.attributes.uv);
+    mats.forEach(m=>{
+      if (m && m.aoMap && g && !g.attributes.uv2 && g.attributes.uv) {
+        g.setAttribute('uv2', g.attributes.uv); // habilita USE_AOMAP
       }
     });
   });
 
   current = root; scene.add(root);
 
-  // Stats + cámara
+  // cámara y stats
   const maxDim = Math.max(size.x,size.y,size.z);
   camera.position.setScalar(maxDim*1.6).setY(maxDim*0.8);
   controls.target.copy(new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3()));
   controls.update();
 
-  // AO inicial
+  // AO inicial (multiplicador sobre albedo)
   applyAOtoScene(parseFloat(aoStrength.value), aoEnable.checked);
   updateStats(size);
 }
@@ -282,7 +283,6 @@ async function headSize(url){
 }
 function loadFromURL(url){
   setMsg('Loading…'); clearModel(); lastGLBBytes = null;
-  // Intentar HEAD para conocer peso
   headSize(url).then(sz => { if(sz) { lastGLBBytes = sz; updateStats(); } });
   loader.load(url, g=>{ place(g.scene); setMsg('Loaded'); },
     xhr=>{ if(xhr.total){ lastGLBBytes = xhr.total; updateStats(); setMsg(`Loading ${(xhr.loaded/xhr.total*100).toFixed(0)}%`);} },
