@@ -3,28 +3,19 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>three.js GLB Viewer — Smart + AO Modes</title>
+<title>Room Viewer</title>
 <style>
   html,body{height:100%;margin:0}
-  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Helvetica,Arial,sans-serif;background:#c9c9c9;color:#111}
-  #topbar{position:fixed;inset:12px 12px auto 12px;display:flex;gap:8px;align-items:center;background:rgba(255,255,255,.75);backdrop-filter:blur(6px);border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:10px 12px;z-index:10}
-  #topbar input{width:440px;max-width:60vw;background:#f3f3f3;border:1px solid #d0d0d0;color:#111;border-radius:10px;padding:8px 10px}
-  #topbar button{background:#1e68ff;border:none;color:white;padding:8px 12px;border-radius:10px;cursor:pointer}
-  #topbar small{opacity:.8}
-  #fileInput{display:none}
-  #stats{position:fixed;inset:auto 12px 12px 12px;background:rgba(255,255,255,.75);border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:8px 12px;display:flex;gap:16px;flex-wrap:wrap}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Helvetica,Arial,sans-serif;background:#c9c9c9;color:#222}
+  #topbar{position:fixed;inset:12px 12px auto 12px;display:flex;gap:8px;align-items:center;background:rgba(255,255,255,.8);backdrop-filter:blur(6px);border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:10px 12px;z-index:10}
+  #topbar input, #topbar select{background:#f5f5f5;border:1px solid #ccc;color:#111;border-radius:6px;padding:6px 8px}
+  #topbar button{background:#1e68ff;border:none;color:white;padding:6px 10px;border-radius:6px;cursor:pointer}
+  #topbar small{opacity:.7}
+  #fileInput {display:none;}
+  #stats{position:fixed;inset:auto 12px 12px 12px;background:rgba(255,255,255,.8);border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:8px 12px;display:flex;gap:16px;flex-wrap:wrap}
+  #drop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;border:2px dashed #2a2f36;border-radius:16px;background:rgba(30,104,255,.08);color:#1e68ff;pointer-events:auto}
   canvas{display:block;width:100%;height:100%}
 </style>
-
-<!-- Import map -->
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://unpkg.com/three@0.164/build/three.module.js",
-    "three/addons/": "https://unpkg.com/three@0.164/examples/jsm/"
-  }
-}
-</script>
 </head>
 <body>
   <div id="topbar">
@@ -32,342 +23,184 @@
     <input id="url" placeholder="https://example.com/model.glb" />
     <button id="loadBtn">Load</button>
     <button id="fileBtn">Open .glb</button>
-    <input type="file" id="fileInput" accept=".glb,model/gltf-binary,model/gltf+binary,application/octet-stream" />
+    <input type="file" id="fileInput" accept=".glb,model/gltf-binary" />
+    <label><input type="checkbox" id="doorsToggle"> All Doors Open</label>
+    <label><input type="checkbox" id="autoHideToggle" checked> Auto-hide front wall</label>
+    <label>AO Mode:
+      <select id="aoMode">
+        <option value="LightOnly">Light only</option>
+        <option value="Albedo×AO">Albedo × AO</option>
+      </select>
+    </label>
+    <label>AO Strength:
+      <input type="range" id="aoStrength" min="0" max="1" step="0.01" value="0.6">
+    </label>
+    <label>HDR:
+      <select id="hdrSelect">
+        <option value="">Room (default)</option>
+        <option value="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_small_03_1k.hdr">Studio Small</option>
+        <option value="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/neutral_wall_1k.hdr">Neutral Grey</option>
+      </select>
+    </label>
     <small id="msg"></small>
   </div>
   <div id="stats"></div>
+  <div id="drop">Drop a .glb file to view</div>
   <canvas id="c"></canvas>
 
 <script type="module">
-import * as THREE from 'three';
-import { GLTFLoader }     from 'three/addons/loaders/GLTFLoader.js';
-import { DRACOLoader }    from 'three/addons/loaders/DRACOLoader.js';
-import { KTX2Loader }     from 'three/addons/loaders/KTX2Loader.js';
-import { RGBELoader }     from 'three/addons/loaders/RGBELoader.js';
-import { OrbitControls }  from 'three/addons/controls/OrbitControls.js';
-import { RoomEnvironment }from 'three/addons/environments/RoomEnvironment.js';
-import GUI from 'https://unpkg.com/lil-gui@0.19/dist/lil-gui.esm.js';
+import * as THREE from 'https://unpkg.com/three@0.164/build/three.module.js';
+import { GLTFLoader } from 'https://unpkg.com/three@0.164/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'https://unpkg.com/three@0.164/examples/jsm/loaders/DRACOLoader.js';
+import { KTX2Loader } from 'https://unpkg.com/three@0.164/examples/jsm/loaders/KTX2Loader.js';
+import { OrbitControls } from 'https://unpkg.com/three@0.164/examples/jsm/controls/OrbitControls.js';
+import { RoomEnvironment } from 'https://unpkg.com/three@0.164/examples/jsm/environments/RoomEnvironment.js';
+import { RGBELoader } from 'https://unpkg.com/three@0.164/examples/jsm/loaders/RGBELoader.js';
 
 /* ---------- base viewer ---------- */
 const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+resize();
 
 const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xc9c9c9);
+
 const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 100);
 camera.position.set(2, 1.2, 2);
 
 const pmrem = new THREE.PMREMGenerator(renderer);
-let currentEnv = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-scene.environment = currentEnv;
-renderer.setClearColor(new THREE.Color('#c9c9c9'));
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 0.6, 0);
 controls.enableDamping = true;
+
+// Luz integral (sin direccional)
+scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 1.0));
+scene.add(new THREE.AmbientLight(0xffffff, 0.35));
 
 /* loaders */
 const draco = new DRACOLoader().setDecoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/draco/');
 const ktx2  = new KTX2Loader().setTranscoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/basis/').detectSupport(renderer);
 const loader = new GLTFLoader().setDRACOLoader(draco).setKTX2Loader(ktx2);
 
-/* integral lighting (no directional) */
-const hemi = new THREE.HemisphereLight(0xffffff, 0x404040, 0.9);
-scene.add(hemi);
-const amb  = new THREE.AmbientLight(0xffffff, 0.25);
-scene.add(amb);
-
 /* helpers */
-let current, lastGLTF=null;
+let current, allNodes=[], doorPanels=[], wallRoots=[], lastHiddenWall=null;
+const MAX_DOOR_DEG = 90; // límite 90º
 function disposeMat(m){ ['map','normalMap','roughnessMap','metalnessMap','occlusionMap','emissiveMap'].forEach(k=>m[k]?.dispose?.()); }
 function clearModel(){
   if(!current) return;
   scene.remove(current);
   current.traverse?.(o=>{ if(o.geometry) o.geometry.dispose(); const m=o.material; if(m) (Array.isArray(m)?m:[m]).forEach(disposeMat); });
-  current = null; lastGLTF=null;
+  current = null; allNodes=[]; doorPanels=[]; wallRoots=[]; lastHiddenWall=null;
 }
 function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geometry; if(g?.index) t+=g.index.count/3; else if(g?.attributes?.position) t+=g.attributes.position.count/3; }}); return Math.round(t); }
-
-/* base place() */
 function place(root){
+  // esconder colliders
+  root.traverse(o=>{ if(o.isMesh && /collider/i.test(o.name)) o.visible=false; });
+  // centrar y posar
   new THREE.Box3().setFromObject(root).getCenter(root.position).multiplyScalar(-1);
-  const box = new THREE.Box3().setFromObject(root);
-  const size = box.getSize(new THREE.Vector3());
+  const box=new THREE.Box3().setFromObject(root); const size=box.getSize(new THREE.Vector3());
   root.position.y -= box.min.y;
+  // guardar referencias por nombre
+  allNodes = [];
+  root.traverse(o=>{ if(o.name) allNodes.push(o); });
+  wallRoots = allNodes.filter(o => /^wall\d+$/i.test(o.name));                 // solo nodos raíz wallN
+  const panelsRaw = allNodes.filter(o => /(leftpanel|rightpanel)\d+/i.test(o.name));
+  // configurar puertas (quaternion de cerrado y signo de giro en Y)
+  doorPanels = panelsRaw.map(o=>{
+    const left = /leftpanel/i.test(o.name);
+    o.userData.closedQ = o.quaternion.clone();
+    o.userData.sign = left ? +1 : -1; // +Y izq, -Y der
+    return o;
+  });
 
-  current = root; scene.add(root);
-
-  document.getElementById('stats').textContent =
-    `Approx. tris: ${triCount(root).toLocaleString()} | Size: ${size.x.toFixed(2)} × ${size.y.toFixed(2)} × ${size.z.toFixed(2)} m`;
-
-  const maxDim = Math.max(size.x,size.y,size.z);
+  current=root; scene.add(root);
+  document.getElementById('stats').textContent = `Approx. tris: ${triCount(root).toLocaleString()} | Size: ${size.x.toFixed(2)} × ${size.y.toFixed(2)} × ${size.z.toFixed(2)} m`;
+  const maxDim=Math.max(size.x,size.y,size.z);
   camera.position.setScalar(maxDim*1.6).setY(maxDim*0.8);
   controls.target.copy(new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3()));
   controls.update();
 
-  buildVariantsGUI(); // if present
-  // re-apply AO patch on new model
-  applyAOToMaterials(params.aoMode, params.aoStrength, params.aoEnabled);
+  // aplicar AO patch al nuevo modelo
+  applyAOToMaterials(aoMode.value, parseFloat(aoStrength.value), true);
 }
 
-/* ------------ name intelligence ------------ */
-const NAME = {
-  wallRoot:   (n)=>/^wall\d+$/i.test(n),          // root nodes ONLY like "wall0"
-  iWallRoot:  (n)=>/^interiorwall\d+$/i.test(n),
-  ceiling:    (n)=>/^ceiling\d+$/i.test(n),
-  floor:      (n)=>/^floor\d+$/i.test(n),
-  doorPanel:  (n)=>/(^|_)((leftpanel|rightpanel)\d+)$/i.test(n) // panels only, no children
-};
-function flatten(root){ const list=[]; root.traverse(o=>{ if(o.name) list.push(o); }); return list; }
-function byNameExact(list, pred){ return list.filter(o => pred(o.name)); }
-
-/* doors */
-function prepDoorPanels(list){
-  const doors=[];
-  list.forEach(o=>{
-    const side = /leftpanel/i.test(o.name) ? 'left' : 'right';
-    o.userData.closedQ = o.quaternion.clone();
-    o.userData.sign    = side === 'left' ? +1 : -1; // +Y left, -Y right
-    doors.push(o);
-  });
-  return doors;
-}
-function setDoorAmount(o, amt){
-  const maxDeg = 110;
-  const rad = THREE.MathUtils.degToRad(maxDeg * o.userData.sign * amt);
+/* ---------- Doors ---------- */
+function setDoor(o, openAmt){ // openAmt [0..1], clamp a 90º
+  const rad = THREE.MathUtils.degToRad(MAX_DOOR_DEG * o.userData.sign * THREE.MathUtils.clamp(openAmt,0,1));
   o.quaternion.copy(o.userData.closedQ);
   o.rotateY(rad);
 }
+function toggleDoors(open){
+  doorPanels.forEach(o=> setDoor(o, open ? 1 : 0));
+}
 
-/* auto-hide wall (camera → target) */
-const raycaster = new THREE.Raycaster();
-let autoHideWall = { enabled:false, hidden:null };
-function getWallRootFromHit(obj){
-  // climb to ancestor named wallN
+/* ---------- Auto-hide front wall ---------- */
+const ray = new THREE.Raycaster();
+function findWallRoot(obj){
   let p=obj;
-  while(p){
-    if (NAME.wallRoot(p.name)) return p;
-    p = p.parent;
-  }
+  while(p){ if(/^wall\d+$/i.test(p.name)) return p; p=p.parent; }
   return null;
 }
-function updateAutoHideWall(){
-  if(!autoHideWall.enabled || !STRUCT?.wallRoots?.length || !current) return;
+function updateAutoHide(){
+  if(!document.getElementById('autoHideToggle').checked || !current) return;
   const dir = new THREE.Vector3().subVectors(controls.target, camera.position).normalize();
-  raycaster.set(camera.position, dir);
-  // intersect entire model; we’ll resolve wall root per hit
-  const hits = raycaster.intersectObject(current, true);
-  let pickedWall = null;
-  for (const h of hits){
-    if (h.object.visible === false) continue;
-    const wr = getWallRootFromHit(h.object);
-    if (wr){ pickedWall = wr; break; }
+  ray.set(camera.position, dir);
+  // Intersectar una vez el modelo; luego subir hasta wallN
+  const hits = ray.intersectObject(current, true);
+  let newWall = null;
+  for(const h of hits){
+    if(h.object.visible === false) continue;
+    const wr = findWallRoot(h.object);
+    if(wr){ newWall = wr; break; }
   }
-  if (pickedWall !== autoHideWall.hidden){
-    if (autoHideWall.hidden) autoHideWall.hidden.visible = true;
-    autoHideWall.hidden = pickedWall;
-    if (autoHideWall.hidden) autoHideWall.hidden.visible = false;
+  if(newWall !== lastHiddenWall){
+    if(lastHiddenWall) lastHiddenWall.visible = true;
+    lastHiddenWall = newWall;
+    if(lastHiddenWall) lastHiddenWall.visible = false;
   }
 }
 
-/* state / GUI */
-let STRUCT=null, DOORS=[];
-function setGroupVisible(nodes, v){ nodes.forEach(n=> n.visible=v); }
-
-/* wrap place to build structure + GUI per model */
-const _placeOrig = place;
-place = (root)=>{
-  _placeOrig(root);
-
-  const all        = flatten(root);
-  const wallRoots  = byNameExact(all, NAME.wallRoot);
-  const iWalls     = byNameExact(all, NAME.iWallRoot);
-  const ceilings   = byNameExact(all, NAME.ceiling);
-  const floors     = byNameExact(all, NAME.floor);
-  const panels     = byNameExact(all, NAME.doorPanel);
-  DOORS = prepDoorPanels(panels);
-  const colliders  = all.filter(o => /collider/i.test(o.name));
-
-  STRUCT = {
-    wallRoots, iWalls, ceilings, floors, colliders,
-    show: { walls:true, iWalls:true, ceilings:true, floors:true, colliders:false },
-    doorsOpen: false,
-    allNodes: all
-  };
-
-  setGroupVisible(wallRoots, STRUCT.show.walls);
-  setGroupVisible(iWalls,    STRUCT.show.iWalls);
-  setGroupVisible(ceilings,  STRUCT.show.ceilings);
-  setGroupVisible(floors,    STRUCT.show.floors);
-  setGroupVisible(colliders, STRUCT.show.colliders);
-
-  buildStructureGUI();
-  buildDoorsGUI();
-  buildIsolateGUI();
-};
-
-/* ---------------- GUI (render/camera/env/structure/doors/variants/AO/isolate) ---------------- */
-const gui = new GUI({ title:'Viewer', width:330 });
-gui.domElement.style.position='fixed';
-gui.domElement.style.right='12px';
-gui.domElement.style.top='12px';
-gui.domElement.style.zIndex='20';
-
-const ToneMapByName = {
-  None: THREE.NoToneMapping,
-  Linear: THREE.LinearToneMapping,
-  Reinhard: THREE.ReinhardToneMapping,
-  Cineon: THREE.CineonToneMapping,
-  ACESFilmic: THREE.ACESFilmicToneMapping
-};
-const params = {
-  exposure: renderer.toneMappingExposure,
-  toneMapping: 'ACESFilmic',
-  background: '#c9c9c9',
-  highQuality: true,
-  wireframe: false,
-  fov: camera.fov,
-  autoRotate: false,
-  autoRotateSpeed: 1.0,
-  autoHideWall: false,
-  env: 'Room',
-  envURL: '',
-  // Doors
-  doorsOpen: false,
-  // AO
-  aoEnabled: true,
-  aoMode: 'Default', // 'Default' | 'Albedo×AO'
-  aoStrength: 0.6,
-  // Isolate
-  isolateQuery: ''
-};
-
-/* Render */
-const fRender = gui.addFolder('Render');
-fRender.add(params, 'exposure', 0.2, 2.5, 0.01).onChange(v=> renderer.toneMappingExposure=v);
-fRender.add(params, 'toneMapping', Object.keys(ToneMapByName)).onChange(n=> renderer.toneMapping = ToneMapByName[n]);
-fRender.addColor(params, 'background').onChange(v=> renderer.setClearColor(new THREE.Color(v)));
-fRender.add(params, 'highQuality').name('High quality (HiDPI)').onChange(v=> renderer.setPixelRatio(v ? Math.min(devicePixelRatio,2) : 1));
-fRender.add(params, 'wireframe').onChange(v=>{
-  if(!current) return;
-  current.traverse(o=>{
-    if(o.isMesh && o.material){
-      (Array.isArray(o.material)?o.material:[o.material]).forEach(m=> m.wireframe = v);
-    }
-  });
-});
-
-/* Camera */
-const fCam = gui.addFolder('Camera');
-fCam.add(params, 'fov', 20, 90, 1).onChange(v=>{ camera.fov=v; camera.updateProjectionMatrix(); });
-fCam.add(params, 'autoRotate').onChange(v=> controls.autoRotate=v);
-fCam.add(params, 'autoRotateSpeed', -5, 5, 0.1).onChange(v=> controls.autoRotateSpeed=v);
-
-/* Structure */
-let _guiStructFolder=null, _guiDoorsFolder=null, _guiEnvFolder=null, _guiVariantsFolder=null, _guiIsolateFolder=null, _guiAOFolder=null;
-
-function buildStructureGUI(){
-  _guiStructFolder?.destroy?.();
-  _guiStructFolder = gui.addFolder('Structure');
-  const S = STRUCT.show;
-  _guiStructFolder.add(S, 'walls').name('Walls on').onChange(v=> setGroupVisible(STRUCT.wallRoots, v));
-  _guiStructFolder.add(S, 'iWalls').name('Interior walls on').onChange(v=> setGroupVisible(STRUCT.iWalls, v));
-  _guiStructFolder.add(S, 'ceilings').name('Ceilings on').onChange(v=> setGroupVisible(STRUCT.ceilings, v));
-  _guiStructFolder.add(S, 'floors').name('Floors on').onChange(v=> setGroupVisible(STRUCT.floors, v));
-  _guiStructFolder.add(S, 'colliders').name('Colliders on').onChange(v=> setGroupVisible(STRUCT.colliders, v));
-  _guiStructFolder.add(params, 'autoHideWall').name('Auto-hide front wall').onChange(v=>{
-    autoHideWall.enabled = v;
-    if(!v && autoHideWall.hidden){ autoHideWall.hidden.visible = true; autoHideWall.hidden=null; }
-  });
-}
-
-/* Doors — toggle */
-function setAllDoorsOpen(open){
-  const amt = open ? 1 : 0;
-  DOORS.forEach(o=> setDoorAmount(o, amt));
-}
-function buildDoorsGUI(){
-  _guiDoorsFolder?.destroy?.();
-  _guiDoorsFolder = gui.addFolder('Doors');
-  _guiDoorsFolder.add(params, 'doorsOpen').name('All doors open').onChange(v=> setAllDoorsOpen(v));
-}
-
-/* Environment / HDRI */
-async function setEnvironmentHDR(url){
-  try{
-    const tex = await new RGBELoader().setDataType(THREE.UnsignedByteType).loadAsync(url);
-    const env = pmrem.fromEquirectangular(tex).texture;
-    tex.dispose();
-    scene.environment = env;
-    currentEnv = env;
-  }catch(e){ console.error('HDR load error', e); }
-}
-function buildEnvGUI(){
-  _guiEnvFolder?.destroy?.();
-  _guiEnvFolder = gui.addFolder('Environment');
-  const presets = ['Room','Neutral Grey (HDR)','Studio Small (HDR)','Custom URL'];
-  _guiEnvFolder.add(params, 'env', presets).onChange(async v=>{
-    if(v==='Room'){
-      scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    } else if(v==='Neutral Grey (HDR)'){
-      await setEnvironmentHDR('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/neutral_wall_1k.hdr');
-    } else if(v==='Studio Small (HDR)'){
-      await setEnvironmentHDR('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_small_03_1k.hdr');
-    } else {
-      if(params.envURL) await setEnvironmentHDR(params.envURL);
-    }
-  });
-  _guiEnvFolder.add(params, 'envURL').name('HDR URL').onFinishChange(async v=>{
-    params.env='Custom URL';
-    await setEnvironmentHDR(v);
-  });
-}
-buildEnvGUI();
-
-/* Variants (KHR_materials_variants) */
-function buildVariantsGUI(){
-  _guiVariantsFolder?.destroy?.();
-  const ext = lastGLTF?.parser?.extensions?.KHR_materials_variants;
-  if(!ext) return;
-  _guiVariantsFolder = gui.addFolder('Variants');
-  const names = ext.variants?.map(v=>v.name) || [];
-  const sel = { variant: names[0] || '' };
-  if(!names.length) return;
-  _guiVariantsFolder.add(sel, 'variant', names).onChange(name=>{
-    try{ ext.selectVariant(current, name); }catch(e){ console.warn('Variant switch error', e); }
-  });
-}
-
-/* AO Controls (engine vs Albedo×AO) */
+/* ---------- AO (engine safe patch) ---------- */
 function patchStandardAO(mat, mode, strength, enabled){
   if(!enabled){
     if(mat.userData._aoPatched){
       delete mat.onBeforeCompile;
       delete mat.userData._aoPatched;
+      delete mat.userData._uAo;
       mat.needsUpdate = true;
     }
     return;
   }
+  const uRef = mat.userData._uAo || (mat.userData._uAo = { value: strength });
+  uRef.value = strength;
+
   mat.userData._aoPatched = true;
   mat.onBeforeCompile = (shader)=>{
-    shader.uniforms.uAoStrength = { value: strength };
-    if (mode === 'Albedo×AO') shader.defines.ENABLE_ALBEDO_AO = true;
+    // uniform + binding
+    shader.fragmentShader = 'uniform float uAoStrength;\n' + shader.fragmentShader;
+    shader.uniforms.uAoStrength = uRef;
 
-    // Re-scale engine's indirect diffuse AO effect (non-destructive)
+    if (mode === 'Albedo×AO') shader.defines.ENABLE_ALBEDO_AO = 1;
+    else delete shader.defines.ENABLE_ALBEDO_AO;
+
+    // Re-mezclar AO sobre la luz indirecta (no destructivo)
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <aomap_fragment>',
 `#include <aomap_fragment>
 #ifdef USE_AOMAP
-  // after engine applied ambientOcclusion to indirectDiffuse, re-mix by strength
-  reflectedLight.indirectDiffuse = mix( reflectedLight.indirectDiffuse, reflectedLight.indirectDiffuse * ambientOcclusion, uAoStrength );
+  reflectedLight.indirectDiffuse = mix( reflectedLight.indirectDiffuse,
+                                        reflectedLight.indirectDiffuse * ambientOcclusion,
+                                        uAoStrength );
 #endif
 `
     );
 
-    // Optionally multiply albedo by AO (to your taste)
+    // (Opcional) multiplicar albedo por AO
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <output_fragment>',
 `#ifdef USE_AOMAP
@@ -386,99 +219,84 @@ function patchStandardAO(mat, mode, strength, enabled){
 function applyAOToMaterials(mode, strength, enabled){
   if(!current) return;
   current.traverse(o=>{
-    if(o.isMesh){
-      const mats = Array.isArray(o.material) ? o.material : [o.material];
-      mats.forEach(m=>{
-        if (m && (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial)){
+    if(!o.isMesh) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    mats.forEach(m=>{
+      if(m && (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial)){
+        if(m.userData?._aoPatched && m.userData._uAo){
+          m.userData._uAo.value = strength; // live update
+          // si cambia el modo, forzamos recompile
+          m.needsUpdate = true;
+        } else {
           patchStandardAO(m, mode, strength, enabled);
         }
-      });
-    }
+      }
+    });
   });
 }
-function buildAOgui(){
-  _guiAOFolder?.destroy?.();
-  _guiAOFolder = gui.addFolder('Ambient Occlusion');
-  _guiAOFolder.add(params, 'aoEnabled').name('Enable AO').onChange(()=> applyAOToMaterials(params.aoMode, params.aoStrength, params.aoEnabled));
-  _guiAOFolder.add(params, 'aoMode', ['Default','Albedo×AO']).onChange(()=> applyAOToMaterials(params.aoMode, params.aoStrength, params.aoEnabled));
-  _guiAOFolder.add(params, 'aoStrength', 0, 1, 0.01).name('Strength').onChange(v=> applyAOToMaterials(params.aoMode, v, params.aoEnabled));
-}
-buildAOgui();
 
-/* Isolate */
-function buildIsolateGUI(){
-  _guiIsolateFolder?.destroy?.();
-  _guiIsolateFolder = gui.addFolder('Isolate');
-  const api = {
-    query: '',
-    isolate(){
-      if(!STRUCT?.allNodes) return;
-      const rx = new RegExp(api.query, 'i');
-      const keep = STRUCT.allNodes.filter(n=> rx.test(n.name));
-      const keepSet = new Set(keep);
-      current.traverse(o=>{
-        let visible = keepSet.has(o);
-        keep.forEach(n=>{ let p=n.parent; while(p){ if(p===o) visible=true; p=p.parent; }});
-        if(o!==current) o.visible = visible;
-      });
-    },
-    clear(){
-      if(!current) return;
-      current.traverse(o=> o.visible=true);
-    }
-  };
-  _guiIsolateFolder.add(api, 'query').name('Name contains');
-  _guiIsolateFolder.add(api, 'isolate').name('Apply isolate');
-  _guiIsolateFolder.add(api, 'clear').name('Clear isolate');
-}
-
-/* ---------- load UI ---------- */
+/* ---------- Loaders & UI ---------- */
 function setMsg(t){ document.getElementById('msg').textContent = t || ''; }
+
 function loadFromURL(url){
   setMsg('Loading…'); clearModel();
-  loader.load(url, gltf=>{
-    lastGLTF = gltf;
-    place(gltf.scene); setMsg('Loaded');
-  }, xhr=>{ if(xhr.total) setMsg(`Loading ${(xhr.loaded/xhr.total*100).toFixed(0)}%`); },
-  err=>{ console.error(err); setMsg('Error loading model'); });
+  loader.load(url, g=>{ place(g.scene); setMsg('Loaded'); }, xhr=>{
+    if(xhr.total) setMsg(`Loading ${(xhr.loaded/xhr.total*100).toFixed(0)}%`);
+  }, err=>{ setMsg('Error loading model'); console.error(err); });
 }
-async function loadLocal(file){
-  try{
-    setMsg('Reading…'); clearModel();
-    const buf = await file.arrayBuffer();
-    loader.parse(buf, '', gltf=>{
-      lastGLTF = gltf;
-      place(gltf.scene); setMsg(file.name);
-    }, err=>{ console.error(err); setMsg('Error parsing GLB'); });
-  }catch(e){ console.error(e); setMsg('Error reading file'); }
+function loadBlob(file){
+  setMsg('Loading local file…'); clearModel();
+  const url = URL.createObjectURL(file);
+  loader.load(url, g=>{ place(g.scene); setMsg(file.name); URL.revokeObjectURL(url); },
+    undefined, e=>{ setMsg('Error with local file'); console.error(e); });
 }
-document.getElementById('loadBtn').onclick=()=>{
-  const u=document.getElementById('url').value.trim();
-  if(u) loadFromURL(u);
-};
+
+const urlInput=document.getElementById('url');
+document.getElementById('loadBtn').onclick=()=>{ if(urlInput.value) loadFromURL(urlInput.value.trim()); };
 const fileInput=document.getElementById('fileInput');
-document.getElementById('fileBtn').onclick=()=>{ fileInput.value=''; fileInput.click(); };
-fileInput.onchange=()=>{ const f=fileInput.files?.[0]; if(f) loadLocal(f); };
+document.getElementById('fileBtn').onclick=()=> fileInput.click();
+fileInput.onchange=()=>{ const f=fileInput.files?.[0]; if(f) loadBlob(f); };
 
-/* ?model= */
-const modelURL=new URLSearchParams(location.search).get('model');
-if(modelURL){ document.getElementById('url').value=modelURL; loadFromURL(modelURL); }
+document.getElementById('doorsToggle').onchange = (e)=> toggleDoors(e.target.checked);
 
-/* ---------- loop ---------- */
-function resize(){
-  const w=innerWidth,h=innerHeight;
-  renderer.setSize(w,h,false);
-  camera.aspect=w/h; camera.updateProjectionMatrix();
-}
-addEventListener('resize', resize);
-resize();
+document.getElementById('aoMode').onchange = ()=> applyAOToMaterials(aoMode.value, parseFloat(aoStrength.value), true);
+document.getElementById('aoStrength').oninput = ()=> applyAOToMaterials(aoMode.value, parseFloat(aoStrength.value), true);
 
-renderer.setAnimationLoop(()=>{
-  controls.update();
-  if(params.autoHideWall) updateAutoHideWall();
-  renderer.render(scene,camera);
+document.getElementById('hdrSelect').onchange = (e)=>{
+  const val = e.target.value;
+  if(!val){ scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture; return; }
+  new RGBELoader().load(val, tex=>{
+    const env = pmrem.fromEquirectangular(tex).texture;
+    scene.environment = env;
+    tex.dispose();
+  }, undefined, err=> console.warn('HDR load error', err));
+};
+
+/* drag & drop */
+const drop=document.getElementById('drop');
+function prevent(e){ e.preventDefault(); e.stopPropagation(); }
+['dragenter','dragover','dragleave','drop'].forEach(ev=>{
+  window.addEventListener(ev, prevent, false);
+  document.addEventListener(ev, prevent, false);
+  document.body.addEventListener(ev, prevent, false);
 });
+window.addEventListener('dragenter', ()=> drop.style.display='flex');
+window.addEventListener('dragover',  ()=> drop.style.display='flex');
+window.addEventListener('dragleave', e=>{
+  if(e.clientX<=0||e.clientY<=0||e.clientX>=innerWidth||e.clientY>=innerHeight){ drop.style.display='none'; }
+});
+function handleDrop(e){ drop.style.display='none'; const f=e.dataTransfer?.files?.[0]; if(f) loadBlob(f); }
+drop.addEventListener('drop', handleDrop);
+document.addEventListener('drop', handleDrop);
+
+/* URL param ?model= */
+const modelURL=new URLSearchParams(location.search).get('model');
+if(modelURL){ urlInput.value=modelURL; loadFromURL(modelURL); }
+
+/* loop */
+function resize(){ const w=innerWidth,h=innerHeight; renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize);
+renderer.setAnimationLoop(()=>{ controls.update(); updateAutoHide(); renderer.render(scene,camera); });
 </script>
 </body>
 </html>
-
