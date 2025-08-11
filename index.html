@@ -125,7 +125,11 @@ function updateStats(sizeVec){
   document.getElementById('stats').textContent = `Tris: ${tris} | Size: ${sz} | GLB: ${humanBytes(lastGLBBytes)}`;
 }
 
-/* ---------- AO ---------- */
+/* ---------- AO: MULTIPLY puro sobre diffuseColor (sin pow ni mix) ---------- */
+/*  AO final = clamp( ambientOcclusion / (1.0 + strength), 0..1 )
+    Luego: diffuseColor.rgb *= AO final
+    - Afecta tanto color embebido como textura de albedo porque opera sobre diffuseColor final.
+*/
 function patchAlbedoAO(mat, strength, enabled){
   if(!enabled){
     if(mat.userData._aoPatched){
@@ -180,39 +184,31 @@ function applyAOtoScene(strength, enabled){
   });
 }
 
-/* ---------- helpers ---------- */
+/* ---------- helpers: parent hardware → door root (manteniendo world transform) ---------- */
+// CAMBIO: versión robusta que preserva TRS con escalas no uniformes/reflexiones
 function reparentKeepWorld(child, newParent){
   child.updateMatrixWorld(true);
+  const childWorld = child.matrixWorld.clone();
+
   newParent.updateMatrixWorld(true);
-
-  const wPos = new THREE.Vector3(), wQuat = new THREE.Quaternion(), wScl = new THREE.Vector3();
-  child.matrixWorld.decompose(wPos, wQuat, wScl);
-
   newParent.add(child);
 
-  const pPos = new THREE.Vector3(), pQuat = new THREE.Quaternion(), pScl = new THREE.Vector3();
-  newParent.matrixWorld.decompose(pPos, pQuat, pScl);
-
-  const invP = new THREE.Matrix4().compose(pPos, pQuat, pScl).invert();
-  const mLocal = new THREE.Matrix4().multiplyMatrices(invP, new THREE.Matrix4().compose(wPos, wQuat, wScl));
-
-  const lPos = new THREE.Vector3(), lQuat = new THREE.Quaternion(), lScl = new THREE.Vector3();
-  mLocal.decompose(lPos, lQuat, lScl);
-
-  child.position.copy(lPos);
-  child.quaternion.copy(lQuat);
-  child.scale.copy(lScl);
+  const invParentWorld = newParent.matrixWorld.clone().invert();
+  const local = new THREE.Matrix4().multiplyMatrices(invParentWorld, childWorld);
+  local.decompose(child.position, child.quaternion, child.scale);
   child.updateMatrixWorld(true);
 }
 function extractIndex(name){ const m = name?.match(/(\d+)/); return m ? m[1] : null; }
 
 /* ---------- puertas ---------- */
+// Rotatorias: leftpanelX / rightpanelX (sin sufijo open/closed)
+// Variantes: *_closedleftpanelX y *_openleftpanelX  (y rightpanel)
 function findDoorPanels(nodes){
   const panels = nodes.filter(o => /(leftpanel|rightpanel)\d+$/i.test(o.name) && !/_open|_closed/i.test(o.name));
   return panels.map(o=>{
     const left = /leftpanel/i.test(o.name);
     o.userData.closedQ = o.quaternion.clone();
-    o.userData.sign    = left ? +1 : -1;
+    o.userData.sign    = left ? +1 : -1; // +Y izq, -Y der
     return o;
   });
 }
@@ -230,19 +226,47 @@ function findDoorVariantPairs(nodes){
   });
   return Array.from(map.values()).filter(p => p.open || p.closed);
 }
-function reparentHardwareToDoors(nodes, doorRoots){
+
+/* ---------- CAMBIO: helpers para raíces de puerta y selección de root visible ---------- */
+function getDoorRootsByIndex(idx){
+  const roots = [];
+  // paneles rotatorios
+  doorPanels.forEach(d=>{
+    const di = extractIndex(d.name);
+    if(String(di) === String(idx)) roots.push(d);
+  });
+  // variantes open/closed
+  doorVariantPairs.forEach(pair=>{
+    const { open, closed } = pair;
+    [open, closed].filter(Boolean).forEach(n=>{
+      const ni = extractIndex(n.name);
+      if(String(ni) === String(idx)) roots.push(n);
+    });
+  });
+  return roots;
+}
+function pickPreferredDoorRoot(idx){
+  const roots = getDoorRootsByIndex(idx);
+  if(!roots.length) return null;
+  const visible = roots.find(r => r.visible === true);
+  return visible || roots[0];
+}
+
+/* ---------- CAMBIO: reparent de herrajes robusto y variante-aware ---------- */
+function reparentHardwareToDoors(nodes, _doorPanels){
   const hardware = nodes.filter(o => /(handle|hinge|knob|hardware)/i.test(o.name));
-  const byIndex = new Map();
-  doorRoots.forEach(d=> byIndex.set(String(extractIndex(d.name) ?? d.name), d));
   hardware.forEach(h=>{
     const idx = extractIndex(h.name);
-    let target = idx!=null ? byIndex.get(String(idx)) : null;
+    let target = idx!=null ? pickPreferredDoorRoot(idx) : null;
+
     if(!target){
+      // fallback por cercanía a panel rotatorio
       let best=null, bestDist=Infinity;
       const hp = new THREE.Vector3(); new THREE.Box3().setFromObject(h).getCenter(hp);
-      doorRoots.forEach(d=>{
+      _doorPanels.forEach(d=>{
         const dp = new THREE.Vector3(); new THREE.Box3().setFromObject(d).getCenter(dp);
-        const dist = hp.distanceTo(dp); if(dist<bestDist){ bestDist=dist; best=d; }
+        const dist = hp.distanceTo(dp);
+        if(dist<bestDist){ bestDist=dist; best=d; }
       });
       target = best;
     }
@@ -252,20 +276,31 @@ function reparentHardwareToDoors(nodes, doorRoots){
 
 /* ---------- placing ---------- */
 function place(root){
+  // Ocultar colliders y techo por defecto
   root.traverse(o=>{
     if(o.isMesh && /collider/i.test(o.name)) o.visible=false;
     if(o.isMesh && /^ceiling\d*$/i.test(o.name)) o.visible=false;
   });
+
+  // centrar / apoyar
   new THREE.Box3().setFromObject(root).getCenter(root.position).multiplyScalar(-1);
   const box  = new THREE.Box3().setFromObject(root);
   const size = box.getSize(new THREE.Vector3());
   root.position.y -= box.min.y;
+
+  // recolectar
   allNodes = []; root.traverse(o=>{ if(o.name) allNodes.push(o); });
   ceilings  = allNodes.filter(o => /^ceiling\d*$/i.test(o.name));
   wallRoots = allNodes.filter(o => /^wall\d+$/i.test(o.name));
+
+  // puertas rotatorias & variantes
   doorPanels       = findDoorPanels(allNodes);
   doorVariantPairs = findDoorVariantPairs(allNodes);
+
+  // reparent hardware → panel raíz (para que acompañen la rotación)
   reparentHardwareToDoors(allNodes, doorPanels);
+
+  // FIX AO: si hay aoMap pero no uv2, clonar uv -> uv2
   root.traverse(o=>{
     if (!o.isMesh) return;
     const g = o.geometry;
@@ -278,33 +313,51 @@ function place(root){
       }
     });
   });
+
   current = root; scene.add(root);
+
+  // cámara + stats
   const maxDim = Math.max(size.x,size.y,size.z);
   camera.position.setScalar(maxDim*1.6).setY(maxDim*0.8);
   controls.target.copy(new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3()));
   controls.update();
+
   applyAOtoScene(parseFloat(aoStrength.value), aoEnable.checked);
   updateStats(size);
   countAoMaps(root);
 }
 
 /* ---------- doors actions ---------- */
-function setDoorRotation(o, open){
+function setDoorRotation(o, open){ // 0/1
   const amt = open ? 1 : 0;
   const rad = THREE.MathUtils.degToRad(MAX_DOOR_DEG * o.userData.sign * THREE.MathUtils.clamp(amt,0,1));
   o.quaternion.copy(o.userData.closedQ);
   o.rotateY(rad);
 }
 function toggleDoors(open){
+  // Rotatorias:
   doorPanels.forEach(o=> setDoorRotation(o, open));
+
+  // Variantes (mostrar open / ocultar closed, o viceversa)
   doorVariantPairs.forEach(pair=>{
     const {open:openNode, closed:closedNode} = pair;
     if(openNode)  openNode.visible  = !!open;
     if(closedNode)closedNode.visible= !open;
   });
+
+  // CAMBIO: reubicar herrajes al nodo visible si la puerta es por variantes
+  if(allNodes?.length){
+    const hardware = allNodes.filter(o => /(handle|hinge|knob|hardware)/i.test(o.name));
+    hardware.forEach(h=>{
+      const idx = extractIndex(h.name);
+      if(idx==null) return;
+      const target = pickPreferredDoorRoot(idx);
+      if(target && h.parent !== target) reparentKeepWorld(h, target);
+    });
+  }
 }
 
-/* ---------- auto-hide wall ---------- */
+/* ---------- auto-hide wall (frente a la cámara) ---------- */
 const ray = new THREE.Raycaster();
 function wallRootOf(obj){ let p=obj; while(p){ if(/^wall\d+$/i.test(p.name)) return p; p=p.parent; } return null; }
 function sampleFrontWalls(){
@@ -367,7 +420,7 @@ function setAODebug(enabled){
   });
 }
 
-/* ---------- loading ---------- */
+/* ---------- loading (con tamaño de GLB) ---------- */
 async function headSize(url){
   try{
     const r = await fetch(url, { method:'HEAD', mode:'cors' });
