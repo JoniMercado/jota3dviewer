@@ -523,7 +523,7 @@ function ensureShadowSystem(){
   shadowPlane.scale.set(size.x*1.05, size.z*1.05, 1);
 
   // casi cenital; apenas desfasada para “dirección” de sombra
-  dirLight.position.set(ctr.x + size.x*0.05, box.max.y + size.y*2.0, ctr.z + size.z*0.05);
+  dirLight.position.set(ctr.x + size.x*0.3, box.max.y + size.y*2.0, ctr.z + size.z*0.05);
   dirLight.target.position.set(ctr.x, ctr.y, ctr.z);
   scene.add(dirLight.target);
 
