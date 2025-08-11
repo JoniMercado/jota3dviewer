@@ -26,6 +26,11 @@
   #drop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;border:2px dashed #2a2f36;border-radius:16px;background:rgba(30,104,255,.08);color:#1e68ff;pointer-events:auto}
   canvas{display:block;width:100%;height:100%}
   label{display:flex;align-items:center;gap:6px}
+  /* mini estilos para panel Anim */
+  details.asset-anim{padding:4px 8px;border:1px solid rgba(0,0,0,.08);border-radius:8px;background:#fff}
+  .anim-group{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap}
+  .anim-group-name{font-size:12px;opacity:.8;padding:2px 6px;background:#f2f2f2;border-radius:6px}
+  .anim-slider{width:160px}
 </style>
 </head>
 <body>
@@ -96,19 +101,11 @@ let lastHiddenWalls = new Set(); // auto-hide
 let lastGLBBytes = null;         // peso del GLB
 const MAX_DOOR_DEG = 90;
 
-// Asset detection + morph UI
+// Asset detection + anim UI (multi-grupo)
 let assetRoot = null;
 let isAsset   = false;
-
-// refs UI dinámicos (se crean al detectar un asset)
-let uiMorphWrap = null;     // contenedor
-let uiMorphSelect = null;   // <select> (si >1 shape keys)
-let uiMorphSlider = null;   // <input type=range>
-
-// cache de meshes destino para aplicar morph
-let morphMeshes = [];       // array de Mesh con morphTargets dentro de 'cajon_anim'
-let morphNames  = [];       // nombres de morph targets disponibles (unión de todos los meshes)
-let activeMorph = null;     // nombre actual seleccionado
+let uiAssetWrap = null; // <details> contenedor del panel
+let animGroups = [];    // [{name, meshes, morphNames, activeMorph, selectEl, sliderEl}]
 
 /* ---------- utils ---------- */
 function setMsg(t){ document.getElementById('msg').textContent = t || ''; }
@@ -128,7 +125,7 @@ function clearModel(){
     if(m) (Array.isArray(m)?m:[m]).forEach(disposeMat);
   });
   current=null; allNodes=[]; doorPanels=[]; doorVariantPairs=[]; ceilings=[]; wallRoots=[]; lastHiddenWalls.clear();
-  removeAssetUI(); // limpiar UI de morph si existía
+  removeAssetUI(); // limpiar UI de anim si existía
 }
 function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geometry; t += g?.index ? g.index.count/3 : (g?.attributes?.position?.count||0)/3; }}); return Math.round(t); }
 function updateStats(sizeVec){
@@ -141,10 +138,8 @@ function updateStats(sizeVec){
 function reparentKeepWorld(child, newParent){
   child.updateMatrixWorld(true);
   const childWorld = child.matrixWorld.clone();
-
   newParent.updateMatrixWorld(true);
   newParent.add(child);
-
   const invParentWorld = newParent.matrixWorld.clone().invert();
   const local = new THREE.Matrix4().multiplyMatrices(invParentWorld, childWorld);
   local.decompose(child.position, child.quaternion, child.scale);
@@ -175,75 +170,24 @@ function doorGroupKey(name){
   return name.toLowerCase();
 }
 
-/* ---------- UI de morph (shape keys) para activos ---------- */
+/* ---------- UI Anim (shape keys) multi-grupo ---------- */
 function removeAssetUI(){
-  morphMeshes = [];
-  morphNames  = [];
-  activeMorph = null;
-  assetRoot   = null;
-  isAsset     = false;
-
-  if(uiMorphWrap){
-    uiMorphWrap.remove();
-    uiMorphWrap = null;
-    uiMorphSelect = null;
-    uiMorphSlider = null;
+  animGroups = [];
+  assetRoot  = null;
+  isAsset    = false;
+  if(uiAssetWrap){
+    uiAssetWrap.remove();
+    uiAssetWrap = null;
   }
 }
-function createAssetUI(){
-  const topbar = document.getElementById('topbar');
-  uiMorphWrap = document.createElement('div');
-  uiMorphWrap.style.display = 'flex';
-  uiMorphWrap.style.alignItems = 'center';
-  uiMorphWrap.style.gap = '8px';
-
-  const tag = document.createElement('small');
-  tag.textContent = 'Asset';
-  tag.style.opacity = '0.7';
-  uiMorphWrap.appendChild(tag);
-
-  if(morphNames.length > 1){
-    uiMorphSelect = document.createElement('select');
-    morphNames.forEach(n=>{
-      const opt = document.createElement('option');
-      opt.value = n; opt.textContent = n;
-      uiMorphSelect.appendChild(opt);
-    });
-    uiMorphSelect.onchange = ()=>{
-      activeMorph = uiMorphSelect.value;
-      const m0 = morphMeshes.find(m=>m.morphTargetDictionary && activeMorph in m.morphTargetDictionary);
-      if(m0){
-        const i = m0.morphTargetDictionary[activeMorph];
-        const v = m0.morphTargetInfluences[i] ?? 0;
-        uiMorphSlider.value = String(v);
-      }
-    };
-    uiMorphWrap.appendChild(uiMorphSelect);
-  }
-
-  uiMorphSlider = document.createElement('input');
-  uiMorphSlider.type = 'range';
-  uiMorphSlider.min = '0';
-  uiMorphSlider.max = '1';
-  uiMorphSlider.step = '0.01';
-  uiMorphSlider.value = '0';
-  uiMorphSlider.style.width = '160px';
-
-  uiMorphSlider.oninput = ()=>{
-    const val = parseFloat(uiMorphSlider.value);
-    morphMeshes.forEach(m=>{
-      const dict = m.morphTargetDictionary;
-      const infl = m.morphTargetInfluences;
-      if(!dict || !infl) return;
-      if(activeMorph in dict){
-        infl[dict[activeMorph]] = val;
-        m.needsUpdate = true;
-      }
-    });
-  };
-
-  uiMorphWrap.appendChild(uiMorphSlider);
-  topbar.appendChild(uiMorphWrap);
+function collectMorphMeshes(root){
+  const out = [];
+  root.traverse(o=>{
+    if(o.isMesh && o.morphTargetInfluences && o.morphTargetDictionary){
+      out.push(o);
+    }
+  });
+  return out;
 }
 function uniqueNamesFromMeshes(meshes){
   const set = new Set();
@@ -254,45 +198,139 @@ function uniqueNamesFromMeshes(meshes){
   });
   return Array.from(set);
 }
-function collectMorphMeshes(rootOfCajon){
-  const out = [];
-  rootOfCajon.traverse(o=>{
-    if(o.isMesh && o.morphTargetInfluences && o.morphTargetDictionary){
-      out.push(o);
+// Encuentra nodos de animación válidos:
+// - Prefijo recomendado: "anim_*"
+// - Compatibilidad: "cajon_anim", "cajon_anim_1", "cajon_anim_2", etc.
+function findAnimRoots(asset){
+  const animRoots = [];
+  asset.traverse(o=>{
+    if(!o.name) return;
+    const name = o.name.toLowerCase();
+    if(/^anim_/.test(name) || /^cajon_anim/.test(name)){
+      animRoots.push(o);
     }
   });
-  return out;
+  // Evitar incluir el asset root si lo llamaron "anim_*" (infrecuente)
+  return animRoots.filter(o=> o !== asset);
 }
-/**
- * Detecta si el modelo es un "activo" (hijo que empieza por model_).
- * Si lo es, busca 'cajon_anim' y arma UI para shape keys.
- */
-function setupAssetControls(rootScene){
+function buildAnimUI(){
+  const topbar = document.getElementById('topbar');
+  uiAssetWrap = document.createElement('details');
+  uiAssetWrap.className = 'asset-anim';
+  uiAssetWrap.open = false;
+
+  const sum = document.createElement('summary');
+  sum.textContent = 'Anim';
+  uiAssetWrap.appendChild(sum);
+
+  // etiqueta “Asset”
+  const tag = document.createElement('small');
+  tag.textContent = 'Asset';
+  tag.style.opacity = '0.7';
+  tag.style.marginLeft = '8px';
+  uiAssetWrap.appendChild(tag);
+
+  // grupos
+  animGroups.forEach(group=>{
+    const row = document.createElement('div');
+    row.className = 'anim-group';
+
+    const nameBadge = document.createElement('span');
+    nameBadge.className = 'anim-group-name';
+    nameBadge.textContent = group.name;
+    row.appendChild(nameBadge);
+
+    // si hay >1 morph, selector
+    if(group.morphNames.length > 1){
+      const sel = document.createElement('select');
+      group.morphNames.forEach(n=>{
+        const opt = document.createElement('option');
+        opt.value = n; opt.textContent = n;
+        sel.appendChild(opt);
+      });
+      sel.onchange = ()=>{
+        group.activeMorph = sel.value;
+        // poner el slider al valor actual del primer mesh que tenga ese morph
+        const m0 = group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
+        if(m0){
+          const i = m0.morphTargetDictionary[group.activeMorph];
+          const v = m0.morphTargetInfluences[i] ?? 0;
+          slider.value = String(v);
+        }
+      };
+      row.appendChild(sel);
+      group.selectEl = sel;
+    }
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0';
+    slider.max = '1';
+    slider.step = '0.01';
+    slider.value = '0';
+    slider.className = 'anim-slider';
+    slider.oninput = ()=>{
+      const val = parseFloat(slider.value);
+      group.meshes.forEach(m=>{
+        const dict = m.morphTargetDictionary;
+        const infl = m.morphTargetInfluences;
+        if(!dict || !infl) return;
+        if(group.activeMorph in dict){
+          infl[dict[group.activeMorph]] = val;
+          m.needsUpdate = true;
+        }
+      });
+    };
+    row.appendChild(slider);
+    group.sliderEl = slider;
+
+    uiAssetWrap.appendChild(row);
+
+    // estado inicial de slider
+    const m0 = group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
+    if(m0){
+      const i = m0.morphTargetDictionary[group.activeMorph];
+      const v = m0.morphTargetInfluences[i] ?? 0;
+      slider.value = String(v);
+    }
+    if(group.selectEl){
+      group.selectEl.value = group.activeMorph;
+    }
+  });
+
+  topbar.appendChild(uiAssetWrap);
+}
+function setupAssetControlsMulti(rootScene){
+  // Buscar hijo cuyo nombre empiece por model_
   assetRoot = rootScene.children.find(c => /^model_/i.test(c.name));
   isAsset = !!assetRoot;
   if(!isAsset){ removeAssetUI(); return; }
 
-  const cajon = assetRoot.getObjectByName('cajon_anim', true);
-  if(!cajon){ removeAssetUI(); return; }
+  // Encontrar todos los nodos anim_* (y cajon_anim*) dentro del asset
+  const animRoots = findAnimRoots(assetRoot);
+  const groups = [];
 
-  morphMeshes = collectMorphMeshes(cajon);
-  if(!morphMeshes.length){ removeAssetUI(); return; }
+  animRoots.forEach(ar=>{
+    const meshes = collectMorphMeshes(ar);
+    if(!meshes.length) return; // sin morphs: ignorar
 
-  morphNames = uniqueNamesFromMeshes(morphMeshes);
-  if(!morphNames.length){ removeAssetUI(); return; }
+    const morphNames = uniqueNamesFromMeshes(meshes);
+    if(!morphNames.length) return;
 
-  activeMorph = morphNames[0];
-  createAssetUI();
+    groups.push({
+      name: ar.name,
+      meshes,
+      morphNames,
+      activeMorph: morphNames[0],
+      selectEl: null,
+      sliderEl: null,
+    });
+  });
 
-  const m0 = morphMeshes.find(m=>m.morphTargetDictionary && activeMorph in m.morphTargetDictionary);
-  if(m0){
-    const i = m0.morphTargetDictionary[activeMorph];
-    const v = m0.morphTargetInfluences[i] ?? 0;
-    uiMorphSlider.value = String(v);
-  }
-  if(uiMorphSelect){
-    uiMorphSelect.value = activeMorph;
-  }
+  if(!groups.length){ removeAssetUI(); return; }
+
+  animGroups = groups;
+  buildAnimUI();
 }
 
 /* ---------- puertas ---------- */
@@ -444,8 +482,8 @@ function place(root){
 
   current = root; scene.add(root);
 
-  // detectar activo 'model_*' y preparar UI/controles de morph (cajon_anim)
-  setupAssetControls(current);
+  // detectar activo 'model_*' y preparar UI/controles de morph para múltiples grupos (anim_*)
+  setupAssetControlsMulti(current);
 
   // cámara + stats
   const maxDim = Math.max(size.x,size.y,size.z);
