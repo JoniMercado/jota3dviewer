@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Room Viewer — v0.0.2</title>
 
-<!-- Import map para GitHub Pages -->
+<!-- Import map (funciona bien en GitHub Pages) -->
 <script type="importmap">
 {
   "imports": {
@@ -97,7 +97,8 @@ const ktx2   = new KTX2Loader().setTranscoderPath('https://unpkg.com/three@0.164
 const loader = new GLTFLoader().setDRACOLoader(draco).setKTX2Loader(ktx2);
 
 /* ---------- state ---------- */
-let current=null, allNodes=[], doorPanels=[], doorVariantPairs=[], ceilings=[], wallRoots=[];
+let current = null;
+let allNodes = [], doorPanels = [], doorVariantPairs = [], ceilings = [], wallRoots = [];
 let lastHiddenWalls = new Set(); // auto-hide
 let lastGLBBytes = null;         // peso del GLB
 const MAX_DOOR_DEG = 90;
@@ -139,7 +140,6 @@ function patchAlbedoAO(mat, strength, enabled){
     }
     return;
   }
-
   const uRef = mat.userData._uAo || (mat.userData._uAo = { value: strength });
   uRef.value = strength;
 
@@ -200,7 +200,8 @@ function reparentKeepWorld(child, newParent){
   const invP = new THREE.Matrix4().compose(pPos, pQuat, pScl).invert();
   const mLocal = new THREE.Matrix4().multiplyMatrices(invP, new THREE.Matrix4().compose(wPos, wQuat, wScl));
 
-  const lPos = new THREE.Vector3(), lQuat = new THREE.Quaternion(), lScl = new THREE.Vector3();
+  const lPos = new THREE.Vector3(), lQuat = new THREE.Qua
+  ternion(), lScl = new THREE.Vector3();
   mLocal.decompose(lPos, lQuat, lScl);
 
   child.position.copy(lPos);
@@ -211,10 +212,10 @@ function reparentKeepWorld(child, newParent){
 function extractIndex(name){ const m = name?.match(/(\d+)/); return m ? m[1] : null; }
 
 /* ---------- puertas ---------- */
-// Rotatorias: leftpanelX / rightpanelX
+// Rotatorias: leftpanelX / rightpanelX (sin sufijo open/closed)
 // Variantes: *_closedleftpanelX y *_openleftpanelX  (y rightpanel)
 function findDoorPanels(nodes){
-  const panels = nodes.filter(o => /(leftpanel|rightpanel)\d+$/i.test(o.name));
+  const panels = nodes.filter(o => /(leftpanel|rightpanel)\d+$/i.test(o.name) && !/_open|_closed/i.test(o.name));
   return panels.map(o=>{
     const left = /leftpanel/i.test(o.name);
     o.userData.closedQ = o.quaternion.clone();
@@ -223,19 +224,17 @@ function findDoorPanels(nodes){
   });
 }
 function findDoorVariantPairs(nodes){
-  // agrupar por (side,index): { open, closed }
   const map = new Map();
   nodes.forEach(o=>{
     const m = o.name.match(/_(open|closed)(leftpanel|rightpanel)(\d+)$/i);
     if(!m) return;
-    const state = m[1].toLowerCase();       // open | closed
-    const side  = m[2].toLowerCase();       // leftpanel | rightpanel
-    const idx   = m[3];                      // número
+    const state = m[1].toLowerCase();
+    const side  = m[2].toLowerCase();
+    const idx   = m[3];
     const key = `${side}-${idx}`;
     if(!map.has(key)) map.set(key, { open:null, closed:null });
     map.get(key)[state] = o;
   });
-  // devolver pares válidos
   return Array.from(map.values()).filter(p => p.open || p.closed);
 }
 function reparentHardwareToDoors(nodes, doorRoots){
@@ -258,14 +257,14 @@ function reparentHardwareToDoors(nodes, doorRoots){
 }
 
 /* ---------- placing ---------- */
-let ceilings=[], wallRoots=[], allNodes=[];
 function place(root){
-  // colliders off
-  root.traverse(o=>{ if(o.isMesh && /collider/i.test(o.name)) o.visible=false; });
-  // ocultar techo por defecto
-  root.traverse(o=>{ if(o.isMesh && /^ceiling\d*$/i.test(o.name)) o.visible = false; });
+  // Ocultar colliders y techo por defecto
+  root.traverse(o=>{
+    if(o.isMesh && /collider/i.test(o.name)) o.visible=false;
+    if(o.isMesh && /^ceiling\d*$/i.test(o.name)) o.visible=false;
+  });
 
-  // centrar/apoyar
+  // centrar / apoyar
   new THREE.Box3().setFromObject(root).getCenter(root.position).multiplyScalar(-1);
   const box  = new THREE.Box3().setFromObject(root);
   const size = box.getSize(new THREE.Vector3());
@@ -276,10 +275,8 @@ function place(root){
   ceilings  = allNodes.filter(o => /^ceiling\d*$/i.test(o.name));
   wallRoots = allNodes.filter(o => /^wall\d+$/i.test(o.name));
 
-  // puertas rotatorias
-  doorPanels = findDoorPanels(allNodes);
-
-  // pares de variantes open/closed (estáticas)
+  // puertas rotatorias & variantes
+  doorPanels       = findDoorPanels(allNodes);
   doorVariantPairs = findDoorVariantPairs(allNodes);
 
   // reparent hardware → panel raíz (para que acompañen la rotación)
@@ -322,7 +319,7 @@ function setDoorRotation(o, open){ // 0/1
 function toggleDoors(open){
   // Rotatorias:
   doorPanels.forEach(o=> setDoorRotation(o, open));
-  // Variantes:
+  // Variantes (mostrar open / ocultar closed, o viceversa)
   doorVariantPairs.forEach(pair=>{
     const {open:openNode, closed:closedNode} = pair;
     if(openNode)  openNode.visible  = !!open;
@@ -332,7 +329,6 @@ function toggleDoors(open){
 
 /* ---------- auto-hide wall (frente a la cámara) ---------- */
 const ray = new THREE.Raycaster();
-let lastHiddenWalls = new Set();
 function wallRootOf(obj){ let p=obj; while(p){ if(/^wall\d+$/i.test(p.name)) return p; p=p.parent; } return null; }
 function sampleFrontWalls(){
   const result = new Set();
@@ -474,10 +470,9 @@ resize();
 
 renderer.setAnimationLoop(()=>{
   controls.update();
-  updateAutoHide();
+  if(document.getElementById('autoHideToggle').checked) updateAutoHide();
   renderer.render(scene,camera);
 });
 </script>
 </body>
 </html>
-
