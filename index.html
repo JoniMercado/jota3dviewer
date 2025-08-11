@@ -232,57 +232,73 @@ function findDoorVariantPairs(nodes){
     if(!m) return;
     const state = m[1].toLowerCase();
     const side  = m[2].toLowerCase();
-    const idx   = m[3];
-    const key = `${side}-${idx}`;
-    if(!map.has(key)) map.set(key, { open:null, closed:null });
-    map.get(key)[state] = o;
-  });
-  return Array.from(map.values()).filter(p => p.open || p.closed);
+/* ---------- helpers: extracción de side ---------- */
+function extractSide(name){
+  if(!name) return null;
+  if(/leftpanel/i.test(name) || /_left/i.test(name)) return 'left';
+  if(/rightpanel/i.test(name) || /_right/i.test(name)) return 'right';
+  return null;
 }
 
-/* ---------- CAMBIO: helpers para raíces de puerta y selección de root visible ---------- */
-function getDoorRootsByIndex(idx){
+/* ---------- helpers para raíces de puerta y selección de root visible ---------- */
+function getDoorRootsByIndex(idx, sidePref){
   const roots = [];
   // paneles rotatorios
   doorPanels.forEach(d=>{
     const di = extractIndex(d.name);
-    if(String(di) === String(idx)) roots.push(d);
+    const side = extractSide(d.name);
+    if(String(di) === String(idx) && (!sidePref || sidePref===side)) roots.push(d);
   });
   // variantes open/closed
   doorVariantPairs.forEach(pair=>{
     const { open, closed } = pair;
     [open, closed].filter(Boolean).forEach(n=>{
       const ni = extractIndex(n.name);
-      if(String(ni) === String(idx)) roots.push(n);
+      const side = extractSide(n.name);
+      if(String(ni) === String(idx) && (!sidePref || sidePref===side)) roots.push(n);
     });
   });
   return roots;
 }
-function pickPreferredDoorRoot(idx){
-  const roots = getDoorRootsByIndex(idx);
-  if(!roots.length) return null;
+function pickPreferredDoorRoot(idx, sidePref){
+  const roots = getDoorRootsByIndex(idx, sidePref);
+  if(!roots.length){
+    // Relajar side si no hubo match estricto
+    const anySide = getDoorRootsByIndex(idx, null);
+    if(!anySide.length) return null;
+    const visibleAny = anySide.find(r => r.visible === true);
+    return visibleAny || anySide[0];
+  }
   const visible = roots.find(r => r.visible === true);
   return visible || roots[0];
 }
 
-/* ---------- CAMBIO: reparent de herrajes robusto y variante-aware ---------- */
+/* ---------- reparent de herrajes robusto y variante-aware (con side) ---------- */
 function reparentHardwareToDoors(nodes, _doorPanels){
   const hardware = nodes.filter(o => /(handle|hinge|knob|hardware)/i.test(o.name));
   hardware.forEach(h=>{
-    const idx = extractIndex(h.name);
-    let target = idx!=null ? pickPreferredDoorRoot(idx) : null;
+    const idx      = extractIndex(h.name);
+    const sidePref = extractSide(h.name); // <— now aware: left/right
+
+    let target = (idx!=null) ? pickPreferredDoorRoot(idx, sidePref) : null;
 
     if(!target){
-      // fallback por cercanía a panel rotatorio
+      // fallback por cercanía a panel rotatorio (mismo side si es posible)
+      let candidates = _doorPanels;
+      if(sidePref){
+        const filtered = _doorPanels.filter(d=> extractSide(d.name)===sidePref);
+        if(filtered.length) candidates = filtered;
+      }
       let best=null, bestDist=Infinity;
       const hp = new THREE.Vector3(); new THREE.Box3().setFromObject(h).getCenter(hp);
-      _doorPanels.forEach(d=>{
+      candidates.forEach(d=>{
         const dp = new THREE.Vector3(); new THREE.Box3().setFromObject(d).getCenter(dp);
         const dist = hp.distanceTo(dp);
         if(dist<bestDist){ bestDist=dist; best=d; }
       });
       target = best;
     }
+
     if(target && h.parent !== target) reparentKeepWorld(h, target);
   });
 }
