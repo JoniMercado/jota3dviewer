@@ -121,7 +121,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping      = THREE.ACESFilmicToneMapping;
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-renderer.shadowMap.enabled = true;                 // << sombras reales
+renderer.shadowMap.enabled = true;
 renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
 
 const scene  = new THREE.Scene();
@@ -140,7 +140,7 @@ controls.enableDamping = true;
 scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 1.0));
 scene.add(new THREE.AmbientLight(0xffffff, 0.35));
 
-/* Luz direccional para sombras (activada en modo asset) */
+/* Luz direccional para sombras (modo asset) */
 let dirLight = null;
 
 /* ---------- loaders ---------- */
@@ -156,7 +156,8 @@ let lastHiddenWalls = new Set();
 /* Asset UI state */
 let assetRoot = null;
 let animGroups = [];
-let shadowPlane = null; // plano receptor de sombras
+let shadowPlane = null;
+let dimsToggle = null; // checkbox "Mostrar medidas"
 
 /* ---------- UI mode ---------- */
 function setUIMode(mode){
@@ -181,7 +182,9 @@ function setUIMode(mode){
   if(autoH) autoH.style.display = isAsset ? 'none' : '';
   if(ceil)  ceil.style.display  = isAsset ? 'none' : '';
   side.style.display = '';
-  svg.style.display  = isAsset ? '' : 'none';
+  // mostrar SVG sólo si es asset y el toggle está activo
+  const showDims = isAsset && (dimsToggle?.checked ?? true);
+  svg.style.display  = showDims ? '' : 'none';
   if(!isAsset) removeShadowSystem();
 }
 setUIMode('clean');
@@ -345,7 +348,7 @@ function enforceDoorVariantExclusivity(defaultState='closed'){
 }
 
 /* ---------- Asset UI (anim_) ---------- */
-function removeAssetUI(){ animGroups = []; document.getElementById('sidepanel').innerHTML = ''; }
+function removeAssetUI(){ animGroups = []; dimsToggle = null; document.getElementById('sidepanel').innerHTML = ''; }
 function collectMorphMeshes(root){
   const out = [];
   root.traverse(o=>{ if(o.isMesh && o.morphTargetInfluences && o.morphTargetDictionary){ out.push(o); }});
@@ -366,7 +369,21 @@ function buildAnimUI(){
   const wrap = document.createElement('details'); wrap.className='asset-anim card'; wrap.open=true;
   const summary = document.createElement('summary'); summary.textContent='Accionables'; wrap.appendChild(summary);
   const inner = document.createElement('div'); inner.className='anim-panel'; wrap.appendChild(inner);
-  const info = document.createElement('div'); info.className='muted'; info.textContent='Elementos retraibles'; inner.appendChild(info);
+
+  // Toggle de medidas
+  const dimsRow = document.createElement('label');
+  dimsRow.style.cssText='display:flex;align-items:center;gap:6px;margin-top:6px;';
+  dimsRow.innerHTML = '<input type="checkbox" id="toggleDims" checked> Mostrar medidas';
+  inner.appendChild(dimsRow);
+  dimsToggle = dimsRow.querySelector('#toggleDims');
+  dimsToggle.addEventListener('change', ()=>{
+    const svg = document.getElementById('measureOverlay');
+    if(!dimsToggle.checked){ svg.style.display='none'; }
+    else { svg.style.display=''; updateMeasureOverlay(); }
+  });
+
+  const info = document.createElement('div'); info.className='muted'; info.textContent='Shape keys por grupo (prefijo anim_)'; inner.appendChild(info);
+
   animGroups.forEach(group=>{
     const row=document.createElement('div'); row.className='anim-group';
     const nameBadge=document.createElement('span'); nameBadge.className='anim-group-name'; nameBadge.textContent=group.name; row.appendChild(nameBadge);
@@ -381,7 +398,7 @@ function buildAnimUI(){
     const slider=document.createElement('input'); slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.01'; slider.value='0'; slider.className='anim-slider';
     slider.oninput=()=>{ const val=parseFloat(slider.value);
       group.meshes.forEach(m=>{ const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return; if(group.activeMorph in d){ inf[d[group.activeMorph]]=val; m.needsUpdate=true; }});
-      updateMeasureOverlay(); // refrescar medidas si el asset cambia
+      updateMeasureOverlay();
     };
     row.appendChild(slider); group.sliderEl=slider; inner.appendChild(row);
     const m0=group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
@@ -391,7 +408,6 @@ function buildAnimUI(){
   side.appendChild(wrap);
 }
 function setupAssetControlsMulti(rootScene){
-  // encontrar cualquier nodo con prefijo model_ en TODA la jerarquía
   assetRoot = null;
   rootScene.traverse(o=>{ if(!assetRoot && o.name && /^model_/i.test(o.name)) assetRoot = o; });
   if(!assetRoot){
@@ -399,7 +415,6 @@ function setupAssetControlsMulti(rootScene){
   }
   setUIMode('asset');
 
-  // anim groups
   const animRoots = findAnimRoots(assetRoot);
   const groups = [];
   animRoots.forEach(ar=>{
@@ -411,7 +426,7 @@ function setupAssetControlsMulti(rootScene){
   if(animGroups.length) buildAnimUI();
 
   updateMeasureOverlay();
-  ensureShadowSystem();    // sombras suaves al piso
+  ensureShadowSystem();
 }
 
 /* ---------- Measurement overlay (SVG) ---------- */
@@ -445,34 +460,34 @@ function drawDim(x1,y1,x2,y2,label){
   const cx = (x1+x2)/2, cy = (y1+y2)/2; labelBadge(cx, cy - 14, label);
 }
 function updateMeasureOverlay(){
-  if(!assetRoot || svg.style.display==='none') return;
+  // respetar toggle
+  if(!assetRoot) return;
+  if(dimsToggle && !dimsToggle.checked) return;
+
   clearMeasureOverlay();
   const box = new THREE.Box3().setFromObject(assetRoot);
-  const c   = box.getCenter(new THREE.Vector3());
-  const size= box.getSize(new THREE.Vector3());
+  const ctr = box.getCenter(new THREE.Vector3());
+  const sz  = box.getSize(new THREE.Vector3());
 
-  const frontZ = (camera.position.z >= c.z) ? box.max.z : box.min.z;
-  const leftX  = (camera.position.x >= c.x) ? box.min.x : box.max.x;
+  const frontZ = (camera.position.z >= ctr.z) ? box.max.z : box.min.z;
+  const leftX  = (camera.position.x >= ctr.x) ? box.min.x : box.max.x;
   const rightX = (leftX===box.min.x) ? box.max.x : box.min.x;
-  const topY   = box.max.y, botY = box.min.y;
 
-  const topFrontLeft   = new THREE.Vector3(leftX, topY, frontZ);
-  const topFrontRight  = new THREE.Vector3(rightX, topY, frontZ);
-  const botFrontLeft   = new THREE.Vector3(leftX, botY, frontZ);
-  const backZ          = (frontZ===box.max.z) ? box.min.z : box.max.z;
-  const botBackLeft    = new THREE.Vector3(leftX, botY, backZ);
+  const topY = box.max.y, botY = box.min.y;
+  const topL = new THREE.Vector3(leftX,  topY, frontZ);
+  const topR = new THREE.Vector3(rightX, topY, frontZ);
+  const botL = new THREE.Vector3(leftX,  botY, frontZ);
+  const back = (frontZ===box.max.z) ? box.min.z : box.max.z;
+  const botLBack = new THREE.Vector3(leftX, botY, back);
 
-  const p1 = projectToScreen(topFrontLeft);
-  const p2 = projectToScreen(topFrontRight);
-  const p3 = projectToScreen(botFrontLeft);
-  const p4 = projectToScreen(topFrontLeft);
-  const p5 = projectToScreen(botFrontLeft);
-  const p6 = projectToScreen(botBackLeft);
+  const off = 18; // px de separación del objeto
+  const p = v => projectToScreen(v);
+  const tL = p(topL), tR = p(topR), bL = p(botL), bLB = p(botLBack);
 
   const cm = v => `${Math.round(v*100)} cm`;
-  if(p1.ok && p2.ok) drawDim(p1.x, p1.y, p2.x, p2.y, cm(size.x)); // ancho
-  if(p3.ok && p4.ok) drawDim(p3.x, p3.y, p4.x, p4.y, cm(size.y)); // alto
-  if(p5.ok && p6.ok) drawDim(p5.x, p5.y, p6.x, p6.y, cm(size.z)); // profundo
+  if(tL.ok && tR.ok) drawDim(tL.x, tL.y - off, tR.x, tR.y - off, cm(sz.x)); // ancho
+  if(bL.ok && tL.ok) drawDim(bL.x - off, bL.y, tL.x - off, tL.y, cm(sz.y)); // alto
+  if(bL.ok && bLB.ok) drawDim(bL.x, bL.y + off, bLB.x, bLB.y + off, cm(sz.z)); // profundo
 }
 
 /* ---------- Sombras suaves (shadow catcher) ---------- */
@@ -482,19 +497,16 @@ function setCastShadow(obj, val){
 function ensureShadowSystem(){
   if(!assetRoot) return;
 
-  // Luz direccional si no existe
   if(!dirLight){
-    dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+    dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.set(1024,1024);
     dirLight.shadow.bias = -0.0001;
     dirLight.shadow.normalBias = 0.02;
     scene.add(dirLight);
   }
-
-  // Plano receptor (ShadowMaterial)
   if(!shadowPlane){
-    const mat = new THREE.ShadowMaterial({ opacity: 0.35 }); // difusa, no dura
+    const mat = new THREE.ShadowMaterial({ opacity: 0.12 });
     const geo = new THREE.PlaneGeometry(1,1);
     shadowPlane = new THREE.Mesh(geo, mat);
     shadowPlane.rotation.x = -Math.PI/2;
@@ -503,20 +515,18 @@ function ensureShadowSystem(){
     scene.add(shadowPlane);
   }
 
-  // Ajustar posición/escala a footprint del asset
   const box = new THREE.Box3().setFromObject(assetRoot);
   const size= box.getSize(new THREE.Vector3());
   const ctr = box.getCenter(new THREE.Vector3());
 
-  shadowPlane.position.set(ctr.x, box.min.y + 0.001, ctr.z);
-  shadowPlane.scale.set(size.x*1.6, size.z*1.6, 1);
+  shadowPlane.position.set(ctr.x, box.min.y + 0.0001, ctr.z);
+  shadowPlane.scale.set(size.x*1.05, size.z*1.05, 1);
 
-  // Luz por encima y algo adelantada, apuntando al asset
-  dirLight.position.set(ctr.x + size.x*0.8, box.max.y + size.y*1.2, ctr.z + size.z*0.8);
+  // casi cenital; apenas desfasada para “dirección” de sombra
+  dirLight.position.set(ctr.x + size.x*0.05, box.max.y + size.y*2.0, ctr.z + size.z*0.05);
   dirLight.target.position.set(ctr.x, ctr.y, ctr.z);
   scene.add(dirLight.target);
 
-  // Hacer que el asset proyecte sombras
   setCastShadow(assetRoot, true);
 }
 function removeShadowSystem(){
@@ -554,7 +564,7 @@ function place(root){
 
   current = root; scene.add(root);
 
-  // detectar cualquier model_ en el árbol
+  // detectar cualquier model_
   assetRoot = null;
   current.traverse(o=>{ if(!assetRoot && o.name && /^model_/i.test(o.name)) assetRoot = o; });
 
@@ -686,8 +696,8 @@ resize();
 renderer.setAnimationLoop(()=>{
   controls.update();
   updateAutoHide();
-  updateMeasureOverlay(); // medidas activas en assets
-  ensureShadowSystem();   // mantener sombra pegada a las patitas si el asset cambia
+  updateMeasureOverlay();
+  ensureShadowSystem();
   renderer.render(scene,camera);
 });
 </script>
