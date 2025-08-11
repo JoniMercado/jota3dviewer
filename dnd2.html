@@ -1,0 +1,24 @@
+<!doctype html><meta charset="utf-8">
+<title>DNDrop test 2</title>
+<style>
+  html,body{height:100%;margin:0;background:#111;color:#eee;font:14px system-ui}
+  #box{position:fixed;inset:0;border:3px dashed #4aa3ff;display:flex;
+       align-items:center;justify-content:center}
+</style>
+<div id="box">Drop a .glb file here</div>
+<pre id="log">Waiting…</pre>
+<script>
+  const log = (...a)=>{ document.getElementById('log').textContent = a.join(' ') }
+  function prevent(e){ e.preventDefault(); e.stopPropagation(); }
+  ['dragenter','dragover','dragleave','drop'].forEach(ev=>{
+    window.addEventListener(ev, prevent, false);
+    document.addEventListener(ev, prevent, false);
+  });
+  window.addEventListener('dragover', ()=>{ document.getElementById('box').style.borderColor='#8fd1ff' })
+  window.addEventListener('dragleave', ()=>{ document.getElementById('box').style.borderColor='#4aa3ff' })
+  window.addEventListener('drop', (e)=>{
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!f) { log('Drop captured, but no file.'); return; }
+    log(`Dropped: ${f.name} (${f.type||'unknown'}) ${f.size} bytes`);
+  });
+</script>
