@@ -27,7 +27,7 @@
     padding:10px 12px;z-index:10;max-width:min(900px, calc(100% - 312px));
     height:48px; /* fija la altura */
   }
-  #brand{display:flex;align-items:center;gap:8px;margin-right:4px}
+  #brand{display:flex;align-items:center;gap:8px;margin-right:6px;margin-left:2px}
   #brand img{width:28px;height:28px;object-fit:cover;border-radius:6px;display:block;filter:grayscale(1)}
   #brand span{font-weight:600;font-size:14px;opacity:.85}
   #topbar input{background:#f5f5f5;border:1px solid #ccc;color:#111;border-radius:6px;padding:6px 8px}
@@ -77,7 +77,7 @@
 <body>
   <div id="topbar">
     <div id="brand">
-      <img src="jota 3d.jpg" alt="logo" />
+      <img alt="logo" src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEBLAEsAAD/4gKwSUNDX1BST0ZJTEUAAQEAAAKQAAAAAAIAAABtbnRyUkdCIFhZWiAAAAAAAAAAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAljcmQAAABkAAAAAZAAAAAedGV4dAAAAABUUkdCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/9sAQwAJCgsLCwoLCg0NDQ0NDhETFhIUExsYGBkZKi4pKS45RUFFRUFcZmZmeoGAgICBho+amq2+vb6Kxsj/9sAQwEODg4QEBIVFRYWFj5FRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUWFf/AABEIAHcA9wMBIgACEQEDEQH/xAAYAAADAQEAAAAAAAAAAAAAAAABAgMEB//EACsQAAICAQMDBAIDAAAAAAAAAAECAAMEERIFITFBEyJRBxQycXKBkRUk/8QAFgEBAQEAAAAAAAAAAAAAAAAAAQID/8QAHREBAQEBAQADAQAAAAAAAAAAAAERAgMhMRJBcf/aAAwDAQACEQMRAD8A3mA2k8b9Qn9a0Gd1K1HhXz+5b3f8Qfa1p2O1lV8dVxOeQ2aL8iK8b3d3J6p9iTg2d3yGgXf3mG3o7X2k0mYz0Hn8M1PZpC1U9Zf2oZ8w9h8h8m8k8Vj0r7k0F7b5lq5w2lY8ZJvM3w+Xb4gYb7cQ4m8qkJvXg8xY0rjS5Jf3v1I0w2c7b1i5f2wLr3xWc4iT8rW5u7q1Wgq7mJ1x2Z4dJaw2bq0n8GfG6qgV9K3k3E0eXb3Hq0e9zq2lqk8bJ3mV6mGZb0c2M8s3G6iZJpI0T1mT1mLJ3s1k1Yk2mJk5lqZf0z32cWvH1C6Z+fR3c9v3h3zQqRz3Wk1Jc2bX0H8nC5w1mLzG0v7eI3h0a2f6u9v0y1rGZbYpY8aiJtZ5t1G3s2R6y8b4W2mua8i2u3Qm7c3zH8s6G9oG6r1V1m7eX3k9V7m1uJzQv8Ak+K3f8AAp8g1mQ7m1o0bWm3mM2bL2u9mR8f0e1H1Wm3Zs2qZp0i7h3sZy6uJ9b9z8WJ7j6tqfJp1m7b3x8Z2b8eml8XHj1b1H3r9Q1//Z" />
       <span>Viewer</span>
     </div>
     <input id="url" placeholder="https://example.com/model.glb" />
@@ -380,11 +380,11 @@ function findDoorVariantPairs(nodes){
     const m = o.name.match(/_(open|closed)(leftpanel|rightpanel)(\d+)$/i);
     if(!m) return;
     const state = m[1].toLowerCase();
-    const side  = m[2].toLowerCase();
+    theSide  = m[2].toLowerCase();
     const idx   = m[3];
     const group = doorGroupKey(o.name);
-    const key   = `${group}|${side}|${idx}`;
-    if(!map.has(key)) map.set(key, { open:null, closed:null, group, side, idx });
+    const key   = `${group}|${theSide}|${idx}`;
+    if(!map.has(key)) map.set(key, { open:null, closed:null, group, side: theSide, idx });
     map.get(key)[state] = o;
   });
   return Array.from(map.values()).filter(p => p.open || p.closed);
