@@ -1,94 +1,129 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Room Viewer</title>
+
+<!-- Import map para que "three" y addons funcionen en GitHub Pages -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.164/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.164/examples/jsm/"
+  }
+}
+</script>
+
 <style>
-  body { margin: 0; background: #c9c9c9; overflow: hidden; }
-  #ui { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.5); color: white; padding: 10px; font-family: sans-serif; }
-  label { display: block; margin-top: 5px; }
+  html,body{height:100%;margin:0}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Helvetica,Arial,sans-serif;background:#c9c9c9;color:#222}
+  #topbar{position:fixed;inset:12px 12px auto 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:rgba(255,255,255,.85);backdrop-filter:blur(6px);border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:10px 12px;z-index:10}
+  #topbar input,#topbar select{background:#f5f5f5;border:1px solid #ccc;color:#111;border-radius:6px;padding:6px 8px}
+  #topbar button{background:#1e68ff;border:none;color:white;padding:6px 10px;border-radius:6px;cursor:pointer}
+  #topbar small{opacity:.7}
+  #fileInput{display:none}
+  #stats{position:fixed;inset:auto 12px 12px 12px;background:rgba(255,255,255,.85);border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:8px 12px;display:flex;gap:16px;flex-wrap:wrap}
+  #drop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;border:2px dashed #2a2f36;border-radius:16px;background:rgba(30,104,255,.08);color:#1e68ff;pointer-events:auto}
+  canvas{display:block;width:100%;height:100%}
+  label{display:flex;align-items:center;gap:6px}
 </style>
 </head>
 <body>
-<div id="ui">
-  <label><input type="checkbox" id="aoEnable" checked> Enable AO</label>
-  <label>AO Strength: <input type="range" id="aoStrength" min="0" max="1" step="0.05" value="1"></label>
-</div>
+  <div id="topbar">
+    <small>GLB URL</small>
+    <input id="url" placeholder="https://example.com/model.glb" />
+    <button id="loadBtn">Load</button>
+    <button id="fileBtn">Open .glb</button>
+    <input type="file" id="fileInput" accept=".glb,model/gltf-binary" />
+
+    <label><input type="checkbox" id="doorsToggle"> All Doors Open</label>
+    <label><input type="checkbox" id="autoHideToggle" checked> Auto-hide front wall</label>
+    <label><input type="checkbox" id="hideCeilingToggle" checked> Hide ceiling</label>
+
+    <label><input type="checkbox" id="aoEnable" checked> AO × Albedo</label>
+    <label>AO Strength <input type="range" id="aoStrength" min="0" max="1" step="0.01" value="0.6"></label>
+
+    <label>HDR
+      <select id="hdrSelect">
+        <option value="">Room (default)</option>
+        <option value="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_small_03_1k.hdr">Studio Small</option>
+        <option value="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/neutral_wall_1k.hdr">Neutral Grey</option>
+      </select>
+    </label>
+    <small id="msg"></small>
+  </div>
+  <div id="stats"></div>
+  <div id="drop">Drop a .glb file to view</div>
+  <canvas id="c"></canvas>
+
 <script type="module">
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.165/build/three.module.js';
-import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.165/examples/jsm/controls/OrbitControls.js';
-import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.165/examples/jsm/loaders/GLTFLoader.js';
-import { RGBELoader } from 'https://cdn.jsdelivr.net/npm/three@0.165/examples/jsm/loaders/RGBELoader.js';
+import * as THREE from 'three';
+import { GLTFLoader }     from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader }    from 'three/addons/loaders/DRACOLoader.js';
+import { KTX2Loader }     from 'three/addons/loaders/KTX2Loader.js';
+import { RGBELoader }     from 'three/addons/loaders/RGBELoader.js';
+import { OrbitControls }  from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment }from 'three/addons/environments/RoomEnvironment.js';
 
-let camera, scene, renderer, controls;
-let current = null;
+/* ---------- renderer / scene / camera ---------- */
+const canvas   = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping      = THREE.ACESFilmicToneMapping;
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 
-init();
-loadModel('room.glb'); // Cambia por tu GLB
+const scene  = new THREE.Scene();
+scene.background = new THREE.Color(0xc9c9c9);
 
-function init(){
-  scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 100);
+camera.position.set(2,1.2,2);
 
-  camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
-  camera.position.set(3, 2, 3);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
-  renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.outputEncoding = THREE.sRGBEncoding;
-  document.body.appendChild(renderer.domElement);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0,0.6,0);
+controls.enableDamping = true;
 
-  controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(0,1,0);
-  controls.update();
+/* iluminación integral */
+scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 1.0));
+scene.add(new THREE.AmbientLight(0xffffff, 0.35));
 
-  // HDRI básica
-  new RGBELoader().load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/neutral_wall_1k.hdr', tex=>{
-    tex.mapping = THREE.EquirectangularReflectionMapping;
-    scene.environment = tex;
-    scene.background = new THREE.Color(0xc9c9c9);
-  });
+/* ---------- loaders ---------- */
+const draco  = new DRACOLoader().setDecoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/draco/');
+const ktx2   = new KTX2Loader().setTranscoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/basis/').detectSupport(renderer);
+const loader = new GLTFLoader().setDRACOLoader(draco).setKTX2Loader(ktx2);
 
-  window.addEventListener('resize', onWindowResize);
-  animate();
+/* ---------- state ---------- */
+let current=null, allNodes=[], doorPanels=[], ceilings=[], wallRoots=[];
+let lastHiddenWalls = new Set(); // para auto-hide
+let lastGLBBytes = null;         // peso del archivo GLB
+const MAX_DOOR_DEG = 90;
+
+/* ---------- utils ---------- */
+function setMsg(t){ document.getElementById('msg').textContent = t || ''; }
+function humanBytes(b){
+  if(b==null) return '—';
+  const u=['B','KB','MB','GB']; let i=0; let n=b;
+  while(n>=1024 && i<u.length-1){ n/=1024; i++; }
+  return `${n.toFixed(n<10&&i>0?1:0)} ${u[i]}`;
+}
+function disposeMat(m){ ['map','normalMap','roughnessMap','metalnessMap','occlusionMap','emissiveMap'].forEach(k=>m[k]?.dispose?.()); }
+function clearModel(){
+  if(!current) return;
+  scene.remove(current);
+  current.traverse?.(o=>{ if(o.geometry) o.geometry.dispose(); const m=o.material; if(m) (Array.isArray(m)?m:[m]).forEach(disposeMat); });
+  current=null; allNodes=[]; doorPanels=[]; ceilings=[]; wallRoots=[]; lastHiddenWalls.clear();
+}
+function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geometry; t += g?.index ? g.index.count/3 : (g?.attributes?.position?.count||0)/3; }}); return Math.round(t); }
+function updateStats(sizeVec){
+  const tris = current ? triCount(current).toLocaleString() : '—';
+  const sz   = sizeVec ? `${sizeVec.x.toFixed(2)} × ${sizeVec.y.toFixed(2)} × ${sizeVec.z.toFixed(2)} m` : '—';
+  document.getElementById('stats').textContent = `Tris: ${tris} | Size: ${sz} | GLB: ${humanBytes(lastGLBBytes)}`;
 }
 
-function onWindowResize(){
-  camera.aspect = window.innerWidth/window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
-function loadModel(url){
-  const loader = new GLTFLoader();
-  loader.load(url, gltf=>{
-    if(current) scene.remove(current);
-    current = gltf.scene;
-
-    // Ocultar techo por default
-    current.traverse(o=>{
-      if(o.isMesh){
-        if(/ceiling/i.test(o.name)){
-          o.visible = false;
-        }
-      }
-    });
-
-    // Fix uv2 si hay AO
-    current.traverse(o=>{
-      if (!o.isMesh) return;
-      const mats = Array.isArray(o.material) ? o.material : [o.material];
-      mats.forEach(mm=>{
-        if (mm && mm.aoMap && o.geometry && !o.geometry.attributes.uv2 && o.geometry.attributes.uv) {
-          o.geometry.setAttribute('uv2', o.geometry.attributes.uv);
-        }
-      });
-    });
-
-    scene.add(current);
-    applyAOtoScene(parseFloat(aoStrength.value), aoEnable.checked);
-  });
-}
-
+/* ---------- AO: multiplicar Albedo × AO (con fix uv2) ---------- */
 function patchAlbedoAO(mat, strength, enabled){
   if(!enabled){
     if(mat.userData._aoPatched){
@@ -107,6 +142,7 @@ function patchAlbedoAO(mat, strength, enabled){
     shader.fragmentShader = 'uniform float uAoStrength;\n' + shader.fragmentShader;
     shader.uniforms.uAoStrength = uRef;
 
+    // Solo obtenemos ambientOcclusion sin tocar la luz de three
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <aomap_fragment>',
 `#ifdef USE_AOMAP
@@ -116,7 +152,7 @@ function patchAlbedoAO(mat, strength, enabled){
 #endif
 `
     );
-
+    // Multiplicamos el albedo por AO con fuerza
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <output_fragment>',
 `diffuseColor.rgb *= mix(1.0, ambientOcclusion, uAoStrength);
@@ -125,7 +161,6 @@ function patchAlbedoAO(mat, strength, enabled){
   };
   mat.needsUpdate = true;
 }
-
 function applyAOtoScene(strength, enabled){
   if(!current) return;
   current.traverse(o=>{
@@ -143,18 +178,183 @@ function applyAOtoScene(strength, enabled){
   });
 }
 
-aoEnable.addEventListener('change', ()=>{
-  applyAOtoScene(parseFloat(aoStrength.value), aoEnable.checked);
-});
-aoStrength.addEventListener('input', ()=>{
-  applyAOtoScene(parseFloat(aoStrength.value), aoEnable.checked);
-});
+/* ---------- placing ---------- */
+function place(root){
+  // ocultar colliders
+  root.traverse(o=>{ if(o.isMesh && /collider/i.test(o.name)) o.visible=false; });
 
-function animate(){
-  requestAnimationFrame(animate);
-  renderer.render(scene, camera);
+  // ocultar techo por defecto
+  root.traverse(o=>{ if(o.isMesh && /^ceiling\d*$/i.test(o.name)) o.visible = document.getElementById('hideCeilingToggle').checked ? false : true; });
+
+  // centrar y apoyar
+  new THREE.Box3().setFromObject(root).getCenter(root.position).multiplyScalar(-1);
+  const box  = new THREE.Box3().setFromObject(root);
+  const size = box.getSize(new THREE.Vector3());
+  root.position.y -= box.min.y;
+
+  // recolectar nodos por nombre
+  allNodes = [];
+  root.traverse(o=>{ if(o.name) allNodes.push(o); });
+
+  // paredes raíz y techos
+  ceilings  = allNodes.filter(o => /^ceiling\d*$/i.test(o.name));
+  wallRoots = allNodes.filter(o => /^wall\d+$/i.test(o.name));
+
+  // puertas (paneles raíz, sin hijos)
+  const panels = allNodes.filter(o => /(leftpanel|rightpanel)\d+/i.test(o.name));
+  doorPanels = panels.map(o=>{
+    const left = /leftpanel/i.test(o.name);
+    o.userData.closedQ = o.quaternion.clone();
+    o.userData.sign    = left ? +1 : -1; // +Y izq, -Y der
+    return o;
+  });
+
+  // Fix uv2 si hay aoMap
+  root.traverse(o=>{
+    if (!o.isMesh) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    mats.forEach(mm=>{
+      if (mm && mm.aoMap && o.geometry && !o.geometry.attributes.uv2 && o.geometry.attributes.uv) {
+        o.geometry.setAttribute('uv2', o.geometry.attributes.uv);
+      }
+    });
+  });
+
+  current = root; scene.add(root);
+
+  // Stats + cámara
+  const maxDim = Math.max(size.x,size.y,size.z);
+  camera.position.setScalar(maxDim*1.6).setY(maxDim*0.8);
+  controls.target.copy(new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3()));
+  controls.update();
+
+  // AO inicial
+  applyAOtoScene(parseFloat(aoStrength.value), aoEnable.checked);
+  updateStats(size);
 }
+
+/* ---------- doors ---------- */
+function setDoor(o, amt){ // amt [0..1], clamp 90°
+  const rad = THREE.MathUtils.degToRad(MAX_DOOR_DEG * o.userData.sign * THREE.MathUtils.clamp(amt,0,1));
+  o.quaternion.copy(o.userData.closedQ);
+  o.rotateY(rad);
+}
+function toggleDoors(open){ doorPanels.forEach(o=> setDoor(o, open?1:0)); }
+
+/* ---------- auto-hide wall (rays hacia target; solo paredes frente a la cámara) ---------- */
+const ray = new THREE.Raycaster();
+function wallRootOf(obj){ let p=obj; while(p){ if(/^wall\d+$/i.test(p.name)) return p; p=p.parent; } return null; }
+function sampleFrontWalls(){
+  const result = new Set();
+  if(!wallRoots?.length) return result;
+  const distToTarget = camera.position.distanceTo(controls.target);
+  const samples = [ {x:0,y:0},{x:0.12,y:0},{x:-0.12,y:0},{x:0,y:0.12},{x:0,y:-0.12} ];
+  for(const ndc of samples){
+    ray.setFromCamera(ndc, camera);
+    const hits = ray.intersectObjects(wallRoots, true);
+    for(const h of hits){
+      if(h.distance < distToTarget*0.995){
+        const wr = wallRootOf(h.object);
+        if(wr){ result.add(wr); break; }
+      }
+    }
+  }
+  return result;
+}
+function updateAutoHide(){
+  if(!document.getElementById('autoHideToggle').checked || !current) return;
+  const front = sampleFrontWalls();
+  for(const wr of Array.from(lastHiddenWalls)){
+    if(!front.has(wr)){ wr.visible = true; lastHiddenWalls.delete(wr); }
+  }
+  for(const wr of front){
+    if(!lastHiddenWalls.has(wr)){ wr.visible = false; lastHiddenWalls.add(wr); }
+  }
+}
+
+/* ---------- loading (con tamaño de GLB) ---------- */
+async function headSize(url){
+  try{
+    const r = await fetch(url, { method:'HEAD', mode:'cors' });
+    const v = r.headers.get('content-length');
+    return v ? parseInt(v) : null;
+  }catch{ return null; }
+}
+function loadFromURL(url){
+  setMsg('Loading…'); clearModel(); lastGLBBytes = null;
+  // Intentar HEAD para conocer peso
+  headSize(url).then(sz => { if(sz) { lastGLBBytes = sz; updateStats(); } });
+  loader.load(url, g=>{ place(g.scene); setMsg('Loaded'); },
+    xhr=>{ if(xhr.total){ lastGLBBytes = xhr.total; updateStats(); setMsg(`Loading ${(xhr.loaded/xhr.total*100).toFixed(0)}%`);} },
+    err=>{ console.error(err); setMsg('Error loading model'); });
+}
+function loadBlob(file){
+  setMsg('Loading local file…'); clearModel();
+  lastGLBBytes = file.size; updateStats();
+  const url = URL.createObjectURL(file);
+  loader.load(url, g=>{ place(g.scene); setMsg(file.name); URL.revokeObjectURL(url); },
+    undefined, e=>{ console.error(e); setMsg('Error with local file'); });
+}
+
+/* ---------- UI ---------- */
+const urlInput = document.getElementById('url');
+document.getElementById('loadBtn').onclick = ()=>{ const u=urlInput.value.trim(); if(u) loadFromURL(u); };
+const fileInput = document.getElementById('fileInput');
+document.getElementById('fileBtn').onclick = ()=>{ fileInput.value=''; fileInput.click(); };
+fileInput.onchange = ()=>{ const f=fileInput.files?.[0]; if(f) loadBlob(f); };
+
+document.getElementById('doorsToggle').onchange = e=> toggleDoors(e.target.checked);
+const aoEnable   = document.getElementById('aoEnable');
+const aoStrength = document.getElementById('aoStrength');
+aoEnable.onchange   = ()=> applyAOtoScene(parseFloat(aoStrength.value), aoEnable.checked);
+aoStrength.oninput  = ()=> applyAOtoScene(parseFloat(aoStrength.value), aoEnable.checked);
+
+document.getElementById('hideCeilingToggle').onchange = e=>{
+  ceilings.forEach(c=> c.visible = !e.target.checked);
+};
+
+document.getElementById('hdrSelect').onchange = (e)=>{
+  const v=e.target.value;
+  if(!v){ scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture; return; }
+  new RGBELoader().load(v, tex=>{
+    const env = pmrem.fromEquirectangular(tex).texture;
+    scene.environment = env;
+    tex.dispose();
+  }, undefined, err=> console.warn('HDR load error', err));
+};
+
+/* ---------- drag & drop ---------- */
+const drop=document.getElementById('drop');
+['dragenter','dragover','dragleave','drop'].forEach(ev=>{
+  window.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); }, false);
+});
+window.addEventListener('dragenter', ()=> drop.style.display='flex');
+window.addEventListener('dragover',  ()=> drop.style.display='flex');
+window.addEventListener('dragleave', e=>{
+  if(e.clientX<=0||e.clientY<=0||e.clientX>=innerWidth||e.clientY>=innerHeight){ drop.style.display='none'; }
+});
+function handleDrop(e){ drop.style.display='none'; const f=e.dataTransfer?.files?.[0]; if(f) loadBlob(f); }
+drop.addEventListener('drop', handleDrop);
+document.addEventListener('drop', handleDrop);
+
+/* ---------- ?model= ---------- */
+const modelURL=new URLSearchParams(location.search).get('model');
+if(modelURL){ urlInput.value=modelURL; loadFromURL(modelURL); }
+
+/* ---------- resize & loop ---------- */
+function resize(){
+  const w=innerWidth,h=innerHeight;
+  renderer.setSize(w,h,false);
+  camera.aspect=w/h; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+resize();
+
+renderer.setAnimationLoop(()=>{
+  controls.update();
+  updateAutoHide();
+  renderer.render(scene,camera);
+});
 </script>
 </body>
 </html>
-
