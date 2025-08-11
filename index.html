@@ -60,6 +60,7 @@ import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
+/* ---------- renderer / scene / camera ---------- */
 const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -79,22 +80,30 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0,0.6,0);
 controls.enableDamping = true;
 
+/* iluminación integral */
 scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 1.0));
 scene.add(new THREE.AmbientLight(0xffffff, 0.35));
 
-const draco = new DRACOLoader().setDecoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/draco/');
-const ktx2 = new KTX2Loader().setTranscoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/basis/').detectSupport(renderer);
+/* ---------- loaders ---------- */
+const draco  = new DRACOLoader().setDecoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/draco/');
+const ktx2   = new KTX2Loader().setTranscoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/basis/').detectSupport(renderer);
 const loader = new GLTFLoader().setDRACOLoader(draco).setKTX2Loader(ktx2);
 
+/* ---------- state ---------- */
 let current = null;
 let allNodes = [], doorPanels = [], doorVariantPairs = [], ceilings = [], wallRoots = [];
-let lastHiddenWalls = new Set();
-let lastGLBBytes = null;
+let lastHiddenWalls = new Set(); // auto-hide
+let lastGLBBytes = null;         // peso del GLB
 const MAX_DOOR_DEG = 90;
 
 /* ---------- utils ---------- */
 function setMsg(t){ document.getElementById('msg').textContent = t || ''; }
-function humanBytes(b){ if(b==null) return '—'; const u=['B','KB','MB','GB']; let i=0; let n=b; while(n>=1024 && i<u.length-1){ n/=1024; i++; } return `${n.toFixed(n<10&&i>0?1:0)} ${u[i]}`; }
+function humanBytes(b){
+  if(b==null) return '—';
+  const u=['B','KB','MB','GB']; let i=0; let n=b;
+  while(n>=1024 && i<u.length-1){ n/=1024; i++; }
+  return `${n.toFixed(n<10&&i>0?1:0)} ${u[i]}`;
+}
 function disposeMat(m){ ['map','normalMap','roughnessMap','metalnessMap','occlusionMap','emissiveMap'].forEach(k=>m[k]?.dispose?.()); }
 function clearModel(){
   if(!current) return;
@@ -117,8 +126,10 @@ function updateStats(sizeVec){
 function reparentKeepWorld(child, newParent){
   child.updateMatrixWorld(true);
   const childWorld = child.matrixWorld.clone();
+
   newParent.updateMatrixWorld(true);
   newParent.add(child);
+
   const invParentWorld = newParent.matrixWorld.clone().invert();
   const local = new THREE.Matrix4().multiplyMatrices(invParentWorld, childWorld);
   local.decompose(child.position, child.quaternion, child.scale);
@@ -126,12 +137,12 @@ function reparentKeepWorld(child, newParent){
 }
 function extractIndex(name){
   if(!name) return null;
-  let m = name.match(/door(\d+)/i);
-  if(m) return m[1];
-  m = name.match(/panel(\d+)/i);
-  if(m) return m[1];
-  m = name.match(/(\d+)(?!.*\d)/);
-  return m ? m[1] : null;
+  let match = name.match(/door(\d+)/i);
+  if(match) return match[1];
+  match = name.match(/panel(\d+)/i);
+  if(match) return match[1];
+  match = name.match(/(\d+)(?!.*\d)/);
+  return match ? match[1] : null;
 }
 function extractSide(name){
   if(!name) return null;
@@ -139,27 +150,42 @@ function extractSide(name){
   if(/rightpanel/i.test(name) || /_right/i.test(name)) return 'right';
   return null;
 }
+/* Diferenciador de “grupo” para puertas que comparten idx/side pero pertenecen a conjuntos distintos */
+function doorGroupKey(name){
+  if(!name) return '';
+  const m = name.match(/^(.*?_door\d+)/i); // hasta "..._doorN"
+  if(m) return m[1].toLowerCase();
+  const m2 = name.match(/^(.*?)(?:_(?:open|closed))?(?:leftpanel|rightpanel)\d+/i);
+  if(m2) return m2[1].toLowerCase();
+  return name.toLowerCase();
+}
 
 /* ---------- puertas ---------- */
+// Rotatorias: leftpanelX / rightpanelX (sin sufijo open/closed)
+// Variantes: *_closedleftpanelX y *_openleftpanelX (y rightpanel)
 function findDoorPanels(nodes){
   const panels = nodes.filter(o => /(leftpanel|rightpanel)\d+$/i.test(o.name) && !/_open|_closed/i.test(o.name));
   return panels.map(o=>{
     const left = /leftpanel/i.test(o.name);
-    o.userData.closedQ = o.quaternion.clone();
-    o.userData.sign = left ? +1 : -1;
+    o.userData.closedQ  = o.quaternion.clone();
+    o.userData.sign     = left ? +1 : -1; // +Y izq, -Y der
+    o.userData.groupKey = doorGroupKey(o.name);
+    o.userData.idx      = extractIndex(o.name);
+    o.userData.side     = left ? 'left' : 'right';
     return o;
   });
 }
 function findDoorVariantPairs(nodes){
-  const map = new Map();
+  const map = new Map(); // key = groupKey|side|idx
   nodes.forEach(o=>{
     const m = o.name.match(/_(open|closed)(leftpanel|rightpanel)(\d+)$/i);
     if(!m) return;
     const state = m[1].toLowerCase();
     const side  = m[2].toLowerCase();
     const idx   = m[3];
-    const key = `${side}-${idx}`;
-    if(!map.has(key)) map.set(key, { open:null, closed:null });
+    const group = doorGroupKey(o.name);
+    const key   = `${group}|${side}|${idx}`;
+    if(!map.has(key)) map.set(key, { open:null, closed:null, group, side, idx });
     map.get(key)[state] = o;
   });
   return Array.from(map.values()).filter(p => p.open || p.closed);
@@ -179,42 +205,65 @@ function enforceDoorVariantExclusivity(defaultOpen){
     }
   });
 }
-function getDoorRootsByIndex(idx, sidePref){
+function getDoorRootsByIndex(groupKeyPref, idx, sidePref){
   const roots = [];
+
+  // paneles rotatorios
   doorPanels.forEach(d=>{
-    const di = extractIndex(d.name);
-    const side = extractSide(d.name);
-    if(String(di) === String(idx) && (!sidePref || sidePref===side)) roots.push(d);
+    const di   = d.userData.idx ?? extractIndex(d.name);
+    const side = d.userData.side ?? extractSide(d.name);
+    const gk   = d.userData.groupKey ?? doorGroupKey(d.name);
+    if(String(di) === String(idx)
+      && (!sidePref || sidePref===side)
+      && (!groupKeyPref || groupKeyPref===gk)) {
+      roots.push(d);
+    }
   });
+
+  // variantes open/closed
   doorVariantPairs.forEach(pair=>{
-    const { open, closed } = pair;
+    const { open, closed, group, side, idx:pi } = pair;
     [open, closed].filter(Boolean).forEach(n=>{
-      const ni = extractIndex(n.name);
-      const side = extractSide(n.name);
-      if(String(ni) === String(idx) && (!sidePref || sidePref===side)) roots.push(n);
+      const di = pi ?? extractIndex(n.name);
+      const gk = group ?? doorGroupKey(n.name);
+      const sd = side  ?? extractSide(n.name);
+      if(String(di) === String(idx)
+        && (!sidePref || sidePref===sd)
+        && (!groupKeyPref || groupKeyPref===gk)) {
+        roots.push(n);
+      }
     });
   });
+
   return roots;
 }
-function pickPreferredDoorRoot(idx, sidePref){
-  const roots = getDoorRootsByIndex(idx, sidePref);
+function pickPreferredDoorRoot(idx, sidePref, groupKeyPref){
+  const roots = getDoorRootsByIndex(groupKeyPref, idx, sidePref);
   if(!roots.length){
-    const any = getDoorRootsByIndex(idx, null);
-    if(!any.length) return null;
-    return any.find(r=>r.visible===true) || any[0];
+    const anyGroup = getDoorRootsByIndex(null, idx, sidePref);
+    if(anyGroup.length) return anyGroup.find(r=>r.visible===true) || anyGroup[0];
+    const anySideAnyGroup = getDoorRootsByIndex(null, idx, null);
+    if(anySideAnyGroup.length) return anySideAnyGroup.find(r=>r.visible===true) || anySideAnyGroup[0];
+    return null;
   }
   return roots.find(r=>r.visible===true) || roots[0];
 }
 function reparentHardwareToDoors(nodes, _doorPanels){
   const hardware = nodes.filter(o => /(handle|hinge|knob|hardware)/i.test(o.name));
   hardware.forEach(h=>{
-    const idx = extractIndex(h.name);
-    const sidePref = extractSide(h.name);
-    let target = (idx!=null) ? pickPreferredDoorRoot(idx, sidePref) : null;
+    const idx          = extractIndex(h.name);
+    const sidePref     = extractSide(h.name);
+    const groupKeyPref = doorGroupKey(h.name);
+
+    let target = (idx!=null) ? pickPreferredDoorRoot(idx, sidePref, groupKeyPref) : null;
+
     if(!target){
+      // fallback por cercanía dentro del mismo groupKey si es posible
       let candidates = _doorPanels;
+      const sameGroup = _doorPanels.filter(d => (d.userData.groupKey ?? doorGroupKey(d.name)) === groupKeyPref);
+      if(sameGroup.length) candidates = sameGroup;
       if(sidePref){
-        const filtered = _doorPanels.filter(d=> extractSide(d.name)===sidePref);
+        const filtered = candidates.filter(d=> (d.userData.side ?? extractSide(d.name))===sidePref);
         if(filtered.length) candidates = filtered;
       }
       let best=null, bestDist=Infinity;
@@ -226,19 +275,20 @@ function reparentHardwareToDoors(nodes, _doorPanels){
       });
       target = best;
     }
+
     if(target && h.parent !== target) reparentKeepWorld(h, target);
   });
 }
 
 /* ---------- placing ---------- */
 function place(root){
-  // ocultar colliders y techo por defecto
+  // Ocultar colliders y techo por defecto
   root.traverse(o=>{
     if(o.isMesh && /collider/i.test(o.name)) o.visible=false;
     if(o.isMesh && /^ceiling\d*$/i.test(o.name)) o.visible=false;
   });
 
-  // centrar y apoyar
+  // centrar / apoyar
   new THREE.Box3().setFromObject(root).getCenter(root.position).multiplyScalar(-1);
   const box  = new THREE.Box3().setFromObject(root);
   const size = box.getSize(new THREE.Vector3());
@@ -249,15 +299,14 @@ function place(root){
   ceilings  = allNodes.filter(o => /^ceiling\d*$/i.test(o.name));
   wallRoots = allNodes.filter(o => /^wall\d+$/i.test(o.name));
 
-  // puertas
+  // puertas rotatorias & variantes
   doorPanels       = findDoorPanels(allNodes);
   doorVariantPairs = findDoorVariantPairs(allNodes);
 
-  // exclusividad variantes + herrajes
+  // asegurar exclusividad de variantes y luego emparentar herrajes
   enforceDoorVariantExclusivity();
   reparentHardwareToDoors(allNodes, doorPanels);
 
-  // agregar escena
   current = root; scene.add(root);
 
   // cámara + stats
@@ -277,22 +326,25 @@ function setDoorRotation(o, open){
   o.rotateY(rad);
 }
 function toggleDoors(open){
-  // rotatorias
+  // Rotatorias
   doorPanels.forEach(o=> setDoorRotation(o, open));
-  // variantes
+
+  // Variantes
   doorVariantPairs.forEach(pair=>{
     const {open:openNode, closed:closedNode} = pair;
     if(openNode)  openNode.visible  = !!open;
     if(closedNode)closedNode.visible= !open;
   });
-  // reubicar herrajes post-cambio
+
+  // Reubicar herrajes post-cambio (respetando groupKey + side + idx)
   if(allNodes?.length){
     const hardware = allNodes.filter(o => /(handle|hinge|knob|hardware)/i.test(o.name));
     hardware.forEach(h=>{
-      const idx = extractIndex(h.name);
-      const sidePref = extractSide(h.name);
+      const idx          = extractIndex(h.name);
+      const sidePref     = extractSide(h.name);
+      const groupKeyPref = doorGroupKey(h.name);
       if(idx==null) return;
-      const target = pickPreferredDoorRoot(idx, sidePref);
+      const target = pickPreferredDoorRoot(idx, sidePref, groupKeyPref);
       if(target && h.parent !== target) reparentKeepWorld(h, target);
     });
   }
@@ -410,3 +462,4 @@ renderer.setAnimationLoop(()=>{
 </script>
 </body>
 </html>
+
