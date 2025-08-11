@@ -3,8 +3,9 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Room Viewer — v0.0.4</title>
+<title>Room Viewer — v0.1.1</title>
 
+<!-- Import map -->
 <script type="importmap">
 {
   "imports": {
@@ -30,9 +31,9 @@
   #topbar button{background:#1e68ff;border:none;color:white;padding:6px 10px;border-radius:6px;cursor:pointer}
   #topbar small{opacity:.7}
   #fileInput{display:none}
-  #logo{height:48px; margin-right:12px; border-radius:6px} /* ← cambiá height para ajustar tamaño */
+  #logo{height:48px;margin-right:12px;border-radius:6px} /* ← cambiá height para ajustar tamaño */
 
-  /* Side panel (animaciones) */
+  /* Side panel (dims + anim) */
   #sidepanel{
     position:fixed;right:12px;top:12px;width:280px;max-height:calc(100% - 24px);
     display:flex;flex-direction:column;gap:8px;overflow:auto;z-index:9
@@ -62,23 +63,37 @@
 </style>
 </head>
 <body>
+  <!-- Viewer v0.1.1 -->
   <div id="topbar">
     <img id="logo" src="https://jonimercado.github.io/threejs-viewer/jota%203d.jpg" alt="Logo">
-    <small>GLB URL</small>
+    <small>GLB/GLTF URL</small>
     <input id="url" placeholder="https://example.com/model.glb" />
     <button id="loadBtn">Load</button>
-    <button id="fileBtn">Open .glb</button>
-    <input type="file" id="fileInput" accept=".glb,model/gltf-binary" />
-    <label><input type="checkbox" id="doorsToggle"> All Doors Open</label>
-    <label><input type="checkbox" id="autoHideToggle" checked> Auto-hide front wall</label>
-    <label><input type="checkbox" id="hideCeilingToggle" checked> Hide ceiling</label>
+    <button id="fileBtn">Open .glb/.gltf</button>
+    <input type="file" id="fileInput" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" />
+
+    <!-- Controles de Rooms (arrancan ocultos) -->
+    <label style="display:none"><input type="checkbox" id="doorsToggle"> All Doors Open</label>
+    <label style="display:none"><input type="checkbox" id="autoHideToggle" checked> Auto-hide front wall</label>
+    <label style="display:none"><input type="checkbox" id="hideCeilingToggle" checked> Hide ceiling</label>
+
     <small id="msg"></small>
   </div>
 
-  <div id="sidepanel"></div>
+  <div id="sidepanel" style="display:none"></div>
   <div id="stats"></div>
-  <div id="drop">Drop a .glb file to view</div>
+  <div id="drop">Drop a .glb / .gltf file to view</div>
   <canvas id="c"></canvas>
+
+  <!-- Password Gate (simple client-side) -->
+  <div id="gate" style="position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:2000;">
+    <div style="background:#fff;padding:20px 16px;border-radius:14px;min-width:280px;box-shadow:0 10px 30px rgba(0,0,0,.2);display:grid;gap:10px">
+      <div style="font-weight:700">Ingresar</div>
+      <input id="gateInput" type="password" placeholder="Password" style="padding:8px 10px;border:1px solid #ddd;border-radius:8px">
+      <button id="gateBtn" style="background:#1e68ff;color:#fff;border:none;border-radius:8px;padding:8px 10px;cursor:pointer">Entrar</button>
+      <small id="gateMsg" style="color:#c00;min-height:1em"></small>
+    </div>
+  </div>
 
 <script type="module">
 import * as THREE from 'three';
@@ -87,6 +102,25 @@ import { DRACOLoader }    from 'three/addons/loaders/DRACOLoader.js';
 import { KTX2Loader }     from 'three/addons/loaders/KTX2Loader.js';
 import { OrbitControls }  from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment }from 'three/addons/environments/RoomEnvironment.js';
+
+/* ---------- password gate ---------- */
+const VIEWER_PASSWORD = 'demo'; // <— cámbiala
+const gate   = document.getElementById('gate');
+const gInput = document.getElementById('gateInput');
+const gBtn   = document.getElementById('gateBtn');
+const gMsg   = document.getElementById('gateMsg');
+function passOK(p){
+  const urlKey = new URLSearchParams(location.search).get('key');
+  return (p && p === VIEWER_PASSWORD) || (urlKey && urlKey === VIEWER_PASSWORD);
+}
+function unlock(){ gate.style.display = 'none'; localStorage.setItem('viewer_ok','1'); }
+(function initGate(){
+  if(localStorage.getItem('viewer_ok') === '1' || passOK(null)){ unlock(); }
+  else{
+    gBtn?.addEventListener('click', ()=>{ if(passOK(gInput.value)) unlock(); else gMsg.textContent='Password incorrecta'; });
+    gInput?.addEventListener('keydown', (e)=>{ if(e.key==='Enter') gBtn.click(); });
+  }
+})();
 
 /* ---------- renderer / scene / camera ---------- */
 const canvas   = document.getElementById('c');
@@ -126,7 +160,31 @@ let assetRoot = null;
 let uiAssetWrap = null;
 let animGroups = []; // {name, meshes, morphNames, activeMorph, selectEl, sliderEl}
 
-/* ---------- utils ---------- */
+/* ---------- UI mode: clean / room / asset ---------- */
+function setUIMode(mode){
+  const lab = id => document.getElementById(id)?.closest('label');
+  const doors = lab('doorsToggle');
+  const autoH = lab('autoHideToggle');
+  const ceil  = lab('hideCeilingToggle');
+  const side  = document.getElementById('sidepanel');
+
+  if(mode === 'clean'){
+    if(doors) doors.style.display = 'none';
+    if(autoH) autoH.style.display = 'none';
+    if(ceil)  ceil.style.display  = 'none';
+    side.style.display = 'none';
+    return;
+  }
+  const isAsset = (mode === 'asset');
+  if(doors) doors.style.display = isAsset ? 'none' : '';
+  if(autoH) autoH.style.display = isAsset ? 'none' : '';
+  if(ceil)  ceil.style.display  = isAsset ? 'none' : '';
+  side.style.display = '';
+}
+// arranque limpio
+setUIMode('clean');
+
+/* ---------- helpers generales ---------- */
 function setMsg(t){ document.getElementById('msg').textContent = t || ''; }
 function disposeMat(m){ ['map','normalMap','roughnessMap','metalnessMap','occlusionMap','emissiveMap'].forEach(k=>m[k]?.dispose?.()); }
 function clearModel(){
@@ -142,8 +200,6 @@ function updateStats(sizeVec){
   const sz   = sizeVec ? `${sizeVec.x.toFixed(2)} × ${sizeVec.y.toFixed(2)} × ${sizeVec.z.toFixed(2)} m` : '—';
   document.getElementById('stats').textContent = `Tris: ${tris} | Size: ${sz}`;
 }
-
-/* ---------- naming helpers ---------- */
 function extractIndex(name){
   if(!name) return null;
   let match = name.match(/door(\d+)/i); if(match) return match[1];
@@ -163,6 +219,15 @@ function doorGroupKey(name){
   const m2 = name.match(/^(.*?)(?:_(?:open|closed))?(?:leftpanel|rightpanel)\d+/i);
   if(m2) return m2[1].toLowerCase();
   return name.toLowerCase();
+}
+
+/* ---------- detectar modo por nombre de archivo ---------- */
+function guessModeFromFilename(name){
+  if(!name) return null;
+  const lower = name.toLowerCase();
+  // *_00.* o *_0x.* (x=0-9) ⇒ room
+  if(/_(00|0[0-9])\.(glb|gltf)$/.test(lower)) return 'room';
+  return null;
 }
 
 /* ---------- transform utils ---------- */
@@ -269,19 +334,30 @@ function reparentHardwareToDoors(nodes, _doorPanels){
     if(target && h.parent !== target) reparentKeepWorld(h, target);
   });
 }
+/* exclusividad open/closed */
+function enforceDoorVariantExclusivity(defaultState='closed'){
+  doorVariantPairs.forEach(({open, closed})=>{
+    if(open && closed){
+      open.visible   = (defaultState === 'open');
+      closed.visible = (defaultState === 'closed');
+    }else if(open){
+      open.visible = (defaultState === 'open');
+    }else if(closed){
+      closed.visible = (defaultState === 'closed');
+    }
+  });
+}
 
 /* ---------- Asset UI (model_ + anim_) ---------- */
 function removeAssetUI(){
   animGroups = [];
   assetRoot  = null;
-  if(uiAssetWrap){ uiAssetWrap.remove(); uiAssetWrap = null; }
+  document.getElementById('sidepanel').innerHTML = '';
 }
 function collectMorphMeshes(root){
   const out = [];
   root.traverse(o=>{
-    if(o.isMesh && o.morphTargetInfluences && o.morphTargetDictionary){
-      out.push(o);
-    }
+    if(o.isMesh && o.morphTargetInfluences && o.morphTargetDictionary){ out.push(o); }
   });
   return out;
 }
@@ -303,19 +379,36 @@ function findAnimRoots(asset){
   });
   return animRoots.filter(o=> o !== asset);
 }
+/* Dims card */
+function makeDimsCard(target, title, sizeVec){
+  const card = document.createElement('div');
+  card.className = 'card';
+  const cm = v => Math.round(v*100);
+  card.innerHTML = `
+    <div style="font-weight:600;margin-bottom:6px">${title}</div>
+    <div style="font-size:13px;line-height:1.5">
+      W×H×D: <b>${cm(sizeVec.x)} × ${cm(sizeVec.y)} × ${cm(sizeVec.z)} cm</b>
+    </div>
+  `;
+  target.prepend(card);
+}
+function computeSizeOf(node){
+  const box = new THREE.Box3().setFromObject(node);
+  return box.getSize(new THREE.Vector3());
+}
 function buildAnimUI(){
   const side = document.getElementById('sidepanel');
-  uiAssetWrap = document.createElement('details');
-  uiAssetWrap.className = 'asset-anim card';
-  uiAssetWrap.open = true;
+  const wrap = document.createElement('details');
+  wrap.className = 'asset-anim card';
+  wrap.open = true;
 
   const summary = document.createElement('summary');
   summary.textContent = 'Anim';
-  uiAssetWrap.appendChild(summary);
+  wrap.appendChild(summary);
 
   const inner = document.createElement('div');
   inner.className = 'anim-panel';
-  uiAssetWrap.appendChild(inner);
+  wrap.appendChild(inner);
 
   const info = document.createElement('div');
   info.className = 'muted';
@@ -380,62 +473,74 @@ function buildAnimUI(){
     if(group.selectEl){ group.selectEl.value = group.activeMorph; }
   });
 
-  side.appendChild(uiAssetWrap);
+  side.appendChild(wrap);
 }
 function setupAssetControlsMulti(rootScene){
+  const side = document.getElementById('sidepanel');
   assetRoot = rootScene.children.find(c => /^model_/i.test(c.name));
-  if(!assetRoot){ removeAssetUI(); return; }
+  if(!assetRoot){
+    removeAssetUI();
+    setUIMode('room');
+    return;
+  }
+  setUIMode('asset');
 
+  // Dims del asset
+  const size = computeSizeOf(assetRoot);
+  makeDimsCard(side, 'Dims', size);
+
+  // Anim groups
   const animRoots = findAnimRoots(assetRoot);
   const groups = [];
-
   animRoots.forEach(ar=>{
     const meshes = collectMorphMeshes(ar);
     if(!meshes.length) return;
     const morphNames = uniqueNamesFromMeshes(meshes);
     if(!morphNames.length) return;
-
-    groups.push({
-      name: ar.name,
-      meshes,
-      morphNames,
-      activeMorph: morphNames[0],
-      selectEl: null,
-      sliderEl: null,
-    });
+    groups.push({ name: ar.name, meshes, morphNames, activeMorph: morphNames[0], selectEl:null, sliderEl:null });
   });
-
-  if(!groups.length){ removeAssetUI(); return; }
-
   animGroups = groups;
-  buildAnimUI();
+  if(animGroups.length) buildAnimUI();
 }
 
 /* ---------- placing ---------- */
 function place(root){
+  // Ocultar colliders y techo por defecto (rooms)
   root.traverse(o=>{
     if(o.isMesh && /collider/i.test(o.name)) o.visible=false;
     if(o.isMesh && /^ceiling\d*$/i.test(o.name)) o.visible=false;
   });
 
+  // centrar / apoyar
   new THREE.Box3().setFromObject(root).getCenter(root.position).multiplyScalar(-1);
   const box  = new THREE.Box3().setFromObject(root);
   const size = box.getSize(new THREE.Vector3());
   root.position.y -= box.min.y;
 
+  // recolectar
   allNodes = []; root.traverse(o=>{ if(o.name) allNodes.push(o); });
   ceilings  = allNodes.filter(o => /^ceiling\d*$/i.test(o.name));
   wallRoots = allNodes.filter(o => /^wall\d+$/i.test(o.name));
 
+  // puertas rotatorias & variantes
   doorPanels       = findDoorPanels(allNodes);
   doorVariantPairs = findDoorVariantPairs(allNodes);
 
+  // solo una variante visible por par (por defecto: closed)
+  enforceDoorVariantExclusivity('closed');
+
+  // reparent hardware → panel visible
   reparentHardwareToDoors(allNodes, doorPanels);
 
   current = root; scene.add(root);
 
-  setupAssetControlsMulti(current);
+  // decidir UI final: asset si tiene model_, si no room
+  const hasModel = current.children.some(c => /^model_/i.test(c.name));
+  setUIMode(hasModel ? 'asset' : 'room');
+  if(hasModel) setupAssetControlsMulti(current);
+  else removeAssetUI();
 
+  // cámara + stats
   const maxDim = Math.max(size.x,size.y,size.z);
   camera.position.setScalar(maxDim*1.6).setY(maxDim*0.8);
   controls.target.copy(new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3()));
@@ -458,7 +563,6 @@ function toggleDoors(open){
     if(openNode)  openNode.visible  = !!open;
     if(closedNode)closedNode.visible= !open;
   });
-
   if(allNodes?.length){
     const hardware = allNodes.filter(o => /(handle|hinge|knob|hardware)/i.test(o.name));
     hardware.forEach(h=>{
@@ -472,7 +576,7 @@ function toggleDoors(open){
   }
 }
 
-/* ---------- auto-hide wall ---------- */
+/* ---------- auto-hide wall (rooms) ---------- */
 const ray = new THREE.Raycaster();
 function wallRootOf(obj){ let p=obj; while(p){ if(/^wall\d+$/i.test(p.name)) return p; p=p.parent; } return null; }
 function sampleFrontWalls(){
@@ -494,8 +598,13 @@ function sampleFrontWalls(){
   return closest ? new Set([closest]) : new Set();
 }
 function updateAutoHide(){
-  if(!document.getElementById('autoHideToggle').checked || !current) return;
+  // solo si el control está visible (modo room) y hay modelo
+  const autoHToggle = document.getElementById('autoHideToggle');
+  if(!autoHToggle || autoHToggle.closest('label').style.display==='none') return;
+  if(!autoHToggle.checked || !current) return;
+
   const front = sampleFrontWalls();
+
   for(const wr of Array.from(lastHiddenWalls)){
     if(!front.has(wr)){ wr.visible = true; lastHiddenWalls.delete(wr); }
   }
@@ -506,13 +615,26 @@ function updateAutoHide(){
 
 /* ---------- loading ---------- */
 function loadFromURL(url){
+  setUIMode('clean'); // barra limpia
   setMsg('Loading…'); clearModel();
+  // preselección por nombre de archivo (room si *_00 o *_0x)
+  try{
+    const fname = url.split('/').pop()?.split('?')[0];
+    const pre = guessModeFromFilename(fname);
+    if(pre) setUIMode(pre);
+  }catch{}
+
   loader.load(url, g=>{ place(g.scene); setMsg('Loaded'); },
     xhr=>{ if(xhr.total) setMsg(`Loading ${(xhr.loaded/xhr.total*100).toFixed(0)}%`); },
     err=>{ console.error(err); setMsg('Error loading model'); });
 }
 function loadBlob(file){
+  setUIMode('clean'); // barra limpia
   setMsg('Loading local file…'); clearModel();
+
+  const pre = guessModeFromFilename(file.name);
+  if(pre) setUIMode(pre);
+
   const url = URL.createObjectURL(file);
   loader.load(url, g=>{ place(g.scene); setMsg(file.name); URL.revokeObjectURL(url); },
     undefined, e=>{ console.error(e); setMsg('Error with local file'); });
@@ -559,7 +681,7 @@ resize();
 
 renderer.setAnimationLoop(()=>{
   controls.update();
-  if(document.getElementById('autoHideToggle').checked) updateAutoHide();
+  updateAutoHide();
   renderer.render(scene,camera);
 });
 </script>
