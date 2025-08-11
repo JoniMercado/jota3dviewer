@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Room Viewer — v0.1.3</title>
+<title>Room Viewer — v0.1.4</title>
 
 <script type="importmap">
 {
@@ -28,6 +28,7 @@
   #topbar small{opacity:.7}
   #fileInput{display:none}
   #logo{height:48px;margin-right:12px;border-radius:6px}
+  label{display:flex;align-items:center;gap:6px}
 
   #sidepanel{position:fixed;right:12px;top:12px;width:280px;max-height:calc(100% - 24px);display:flex;flex-direction:column;gap:8px;overflow:auto;z-index:9}
   .card{background:rgba(255,255,255,.9);backdrop-filter:blur(6px);border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:10px 12px}
@@ -40,19 +41,9 @@
   .anim-slider{width:160px}
   .muted{opacity:.7;font-size:12px}
 
-  #stats{position:fixed;inset:auto 12px 12px 12px;background:rgba(255,255,255,.85);border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:8px 12px;display:flex;gap:16px;flex-wrap:wrap}
+  #stats{position:fixed;inset:auto 12px 12px 12px;background:rgba(255,255,255,.85);border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:8px 12px;display:flex;gap:16px;flex-wrap:wrap;z-index:5}
   #drop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;border:2px dashed #2a2f36;border-radius:16px;background:rgba(30,104,255,.08);color:#1e68ff;pointer-events:auto;z-index:999}
   canvas{display:block;width:100%;height:100%}
-  label{display:flex;align-items:center;gap:6px}
-
-  /* Medidas (overlay SVG) */
-  #measureOverlay{position:fixed;inset:0;pointer-events:none;z-index:8;filter: drop-shadow(0 1px 0 rgba(0,0,0,.2));}
-  .m-line{stroke:#2b60ff;stroke-width:2;fill:none}
-  .m-arrow{stroke:#2b60ff;stroke-width:2;fill:none;marker-end:url(#arrow)}
-  .m-badge{fill:white;stroke:#2b60ff;stroke-width:2}
-  .m-text{font:12px/1.2 system-ui,Segoe UI,Roboto,Arial;color:#2b60ff;fill:#2b60ff;text-anchor:middle;dominant-baseline:middle}
-
-  @media (max-width: 960px){ #sidepanel{width:240px} }
 </style>
 </head>
 <body>
@@ -64,16 +55,18 @@
     <button id="fileBtn">Open .glb/.gltf</button>
     <input type="file" id="fileInput" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" />
 
-    <!-- Rooms controls (ocultos por default) -->
+    <!-- Rooms controls (ocultos cuando es asset) -->
     <label style="display:none"><input type="checkbox" id="doorsToggle"> All Doors Open</label>
     <label style="display:none"><input type="checkbox" id="autoHideToggle" checked> Auto-hide front wall</label>
     <label style="display:none"><input type="checkbox" id="hideCeilingToggle" checked> Hide ceiling</label>
+
+    <!-- Global -->
+    <label><input type="checkbox" id="autoRotateToggle"> Auto-rotate</label>
 
     <small id="msg"></small>
   </div>
 
   <div id="sidepanel" style="display:none"></div>
-  <svg id="measureOverlay"></svg>
   <div id="stats"></div>
   <div id="drop">Drop a .glb / .gltf file to view</div>
   <canvas id="c"></canvas>
@@ -122,7 +115,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping      = THREE.ACESFilmicToneMapping;
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type    = THREE.PCFSoftShadowMap; // podés cambiar a VSMShadowMap si querés blur extra
 
 const scene  = new THREE.Scene();
 scene.background = new THREE.Color(0xc9c9c9);
@@ -136,6 +129,8 @@ scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0,0.6,0);
 controls.enableDamping = true;
+controls.autoRotate = false;
+controls.autoRotateSpeed = 0.8;
 
 scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 1.0));
 scene.add(new THREE.AmbientLight(0xffffff, 0.35));
@@ -152,12 +147,9 @@ const loader = new GLTFLoader().setDRACOLoader(draco).setKTX2Loader(ktx2);
 let current = null;
 let allNodes = [], doorPanels = [], doorVariantPairs = [], ceilings = [], wallRoots = [];
 let lastHiddenWalls = new Set();
-
-/* Asset UI state */
-let assetRoot = null;
-let animGroups = [];
+let assetRoot = null;            // nodo model_
+let animGroups = [];             // [{name, displayName, meshes, morphNames, activeMorph, ...}]
 let shadowPlane = null;
-let dimsToggle = null; // checkbox "Mostrar medidas"
 
 /* ---------- UI mode ---------- */
 function setUIMode(mode){
@@ -166,14 +158,12 @@ function setUIMode(mode){
   const autoH = lab('autoHideToggle');
   const ceil  = lab('hideCeilingToggle');
   const side  = document.getElementById('sidepanel');
-  const svg   = document.getElementById('measureOverlay');
 
   if(mode === 'clean'){
     if(doors) doors.style.display = 'none';
     if(autoH) autoH.style.display = 'none';
     if(ceil)  ceil.style.display  = 'none';
     side.style.display = 'none';
-    svg.style.display  = 'none';
     removeShadowSystem();
     return;
   }
@@ -181,10 +171,7 @@ function setUIMode(mode){
   if(doors) doors.style.display = isAsset ? 'none' : '';
   if(autoH) autoH.style.display = isAsset ? 'none' : '';
   if(ceil)  ceil.style.display  = isAsset ? 'none' : '';
-  side.style.display = '';
-  // mostrar SVG sólo si es asset y el toggle está activo
-  const showDims = isAsset && (dimsToggle?.checked ?? true);
-  svg.style.display  = showDims ? '' : 'none';
+  side.style.display = isAsset ? '' : 'none';
   if(!isAsset) removeShadowSystem();
 }
 setUIMode('clean');
@@ -197,7 +184,7 @@ function clearModel(){
   scene.remove(current);
   current.traverse?.(o=>{ if(o.geometry) o.geometry.dispose(); const m=o.material; if(m) (Array.isArray(m)?m:[m]).forEach(disposeMat); });
   current=null; allNodes=[]; doorPanels=[]; doorVariantPairs=[]; ceilings=[]; wallRoots=[]; lastHiddenWalls.clear();
-  removeAssetUI(); clearMeasureOverlay(); removeShadowSystem();
+  removeAssetUI(); removeShadowSystem();
 }
 function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geometry; t += g?.index ? g.index.count/3 : (g?.attributes?.position?.count||0)/3; }}); return Math.round(t); }
 function updateStats(sizeVec){
@@ -242,7 +229,7 @@ function reparentKeepWorld(child, newParent){
   child.updateMatrixWorld(true);
 }
 
-/* ---------- puertas ---------- */
+/* ---------- puertas (rooms) ---------- */
 function findDoorPanels(nodes){
   const panels = nodes.filter(o => /(leftpanel|rightpanel)\d+$/i.test(o.name) && !/_open|_closed/i.test(o.name));
   return panels.map(o=>{
@@ -348,7 +335,7 @@ function enforceDoorVariantExclusivity(defaultState='closed'){
 }
 
 /* ---------- Asset UI (anim_) ---------- */
-function removeAssetUI(){ animGroups = []; dimsToggle = null; document.getElementById('sidepanel').innerHTML = ''; }
+function removeAssetUI(){ animGroups = []; document.getElementById('sidepanel').innerHTML = ''; }
 function collectMorphMeshes(root){
   const out = [];
   root.traverse(o=>{ if(o.isMesh && o.morphTargetInfluences && o.morphTargetDictionary){ out.push(o); }});
@@ -363,6 +350,7 @@ function findAnimRoots(asset){
   const arr=[]; asset.traverse(o=>{ if(o!==asset && o.name && /^anim_/i.test(o.name)) arr.push(o); });
   return arr;
 }
+function stripAnimPrefix(s){ return s?.replace(/^anim_/i,'') ?? s; }
 function buildAnimUI(){
   if(!animGroups.length) return;
   const side = document.getElementById('sidepanel');
@@ -370,49 +358,64 @@ function buildAnimUI(){
   const summary = document.createElement('summary'); summary.textContent='Accionables'; wrap.appendChild(summary);
   const inner = document.createElement('div'); inner.className='anim-panel'; wrap.appendChild(inner);
 
-  // Toggle de medidas
-  const dimsRow = document.createElement('label');
-  dimsRow.style.cssText='display:flex;align-items:center;gap:6px;margin-top:6px;';
-  dimsRow.innerHTML = '<input type="checkbox" id="toggleDims" checked> Mostrar medidas';
-  inner.appendChild(dimsRow);
-  dimsToggle = dimsRow.querySelector('#toggleDims');
-  dimsToggle.addEventListener('change', ()=>{
-    const svg = document.getElementById('measureOverlay');
-    if(!dimsToggle.checked){ svg.style.display='none'; }
-    else { svg.style.display=''; updateMeasureOverlay(); }
+  // Toggle EXPLOTAR (todos los morphs a 1/0)
+  const explodeRow = document.createElement('label');
+  explodeRow.style.cssText='display:flex;align-items:center;gap:6px;margin-bottom:6px;';
+  explodeRow.innerHTML = '<input type="checkbox" id="explodeToggle"> Explotar';
+  inner.appendChild(explodeRow);
+  const explodeToggle = explodeRow.querySelector('#explodeToggle');
+  explodeToggle.addEventListener('change', ()=>{
+    const val = explodeToggle.checked ? 1 : 0;
+    animGroups.forEach(g=>{
+      g.meshes.forEach(m=>{
+        const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return;
+        // Setear TODAS las keys de este mesh
+        Object.values(d).forEach(idx=>{ inf[idx]=val; });
+        m.needsUpdate = true;
+      });
+      // reflejar en sliders
+      if(g.sliderEl) g.sliderEl.value = String(val);
+    });
   });
 
-  const info = document.createElement('div'); info.className='muted'; info.textContent='Shape keys por grupo (prefijo anim_)'; inner.appendChild(info);
+  const info = document.createElement('div'); info.className='muted'; info.textContent='Shape keys por grupo'; inner.appendChild(info);
 
   animGroups.forEach(group=>{
     const row=document.createElement('div'); row.className='anim-group';
-    const nameBadge=document.createElement('span'); nameBadge.className='anim-group-name'; nameBadge.textContent=group.name; row.appendChild(nameBadge);
+    const nameBadge=document.createElement('span'); nameBadge.className='anim-group-name'; nameBadge.textContent=stripAnimPrefix(group.name); row.appendChild(nameBadge);
+
     if(group.morphNames.length>1){
       const sel=document.createElement('select');
-      group.morphNames.forEach(n=>{ const o=document.createElement('option'); o.value=n;o.textContent=n; sel.appendChild(o); });
-      sel.onchange=()=>{ group.activeMorph=sel.value; const m0=group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
+      group.morphNames.forEach(n=>{ const o=document.createElement('option'); o.value=n;o.textContent=stripAnimPrefix(n); sel.appendChild(o); });
+      sel.onchange=()=>{
+        group.activeMorph=sel.value;
+        const m0=group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
         if(m0){ const i=m0.morphTargetDictionary[group.activeMorph]; const v=m0.morphTargetInfluences[i]??0; slider.value=String(v); }
       };
       row.appendChild(sel); group.selectEl=sel;
     }
     const slider=document.createElement('input'); slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.01'; slider.value='0'; slider.className='anim-slider';
     slider.oninput=()=>{ const val=parseFloat(slider.value);
-      group.meshes.forEach(m=>{ const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return; if(group.activeMorph in d){ inf[d[group.activeMorph]]=val; m.needsUpdate=true; }});
-      updateMeasureOverlay();
+      animGroups.forEach(g=>{
+        if(g===group){
+          g.meshes.forEach(m=>{ const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return; if(g.activeMorph in d){ inf[d[g.activeMorph]]=val; m.needsUpdate=true; }});
+        }
+      });
     };
     row.appendChild(slider); group.sliderEl=slider; inner.appendChild(row);
+
+    // init values
     const m0=group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
     if(m0){ const i=m0.morphTargetDictionary[group.activeMorph]; const v=m0.morphTargetInfluences[i]??0; slider.value=String(v); }
-    if(group.selectEl){ group.selectEl.value=group.activeMorph; }
+    if(group.selectEl){ group.selectEl.value=group.activeMorph; group.selectEl.querySelectorAll('option').forEach(o=>{ if(o.value===group.activeMorph) o.selected=true; });}
   });
   side.appendChild(wrap);
 }
 function setupAssetControlsMulti(rootScene){
   assetRoot = null;
   rootScene.traverse(o=>{ if(!assetRoot && o.name && /^model_/i.test(o.name)) assetRoot = o; });
-  if(!assetRoot){
-    removeAssetUI(); setUIMode('room'); clearMeasureOverlay(); removeShadowSystem(); return;
-  }
+  if(!assetRoot){ removeAssetUI(); setUIMode('room'); removeShadowSystem(); return; }
+
   setUIMode('asset');
 
   const animRoots = findAnimRoots(assetRoot);
@@ -425,84 +428,20 @@ function setupAssetControlsMulti(rootScene){
   animGroups = groups;
   if(animGroups.length) buildAnimUI();
 
-  updateMeasureOverlay();
   ensureShadowSystem();
 }
 
-/* ---------- Measurement overlay (SVG) ---------- */
-const svg = document.getElementById('measureOverlay');
-const svgNS = 'http://www.w3.org/2000/svg';
-const defs = document.createElementNS(svgNS,'defs');
-const marker = document.createElementNS(svgNS,'marker');
-marker.setAttribute('id','arrow'); marker.setAttribute('markerWidth','6'); marker.setAttribute('markerHeight','6');
-marker.setAttribute('refX','6'); marker.setAttribute('refY','3'); marker.setAttribute('orient','auto');
-const arrowPath = document.createElementNS(svgNS,'path'); arrowPath.setAttribute('d','M0,0 L6,3 L0,6 Z'); arrowPath.setAttribute('fill','#2b60ff');
-marker.appendChild(arrowPath); defs.appendChild(marker); svg.appendChild(defs);
-
-function clearMeasureOverlay(){ while(svg.childNodes.length>1) svg.removeChild(svg.lastChild); }
-function projectToScreen(v3){
-  const v = v3.clone().project(camera);
-  return { x:(v.x*0.5+0.5)*innerWidth, y:(-v.y*0.5+0.5)*innerHeight, z:v.z, ok:(v.z>-1 && v.z<1) };
-}
-function labelBadge(x,y,text){
-  const padX=10, padY=6;
-  const textEl = document.createElementNS(svgNS,'text'); textEl.setAttribute('class','m-text'); textEl.setAttribute('x',x); textEl.setAttribute('y',y); textEl.textContent = text;
-  svg.appendChild(textEl); const bb = textEl.getBBox(); svg.removeChild(textEl);
-  const bg = document.createElementNS(svgNS,'rect'); bg.setAttribute('class','m-badge');
-  bg.setAttribute('x', bb.x - padX); bg.setAttribute('y', bb.y - padY); bg.setAttribute('rx', 12); bg.setAttribute('ry', 12);
-  bg.setAttribute('width', bb.width + padX*2); bg.setAttribute('height', bb.height + padY*2);
-  svg.appendChild(bg); svg.appendChild(textEl);
-}
-function drawDim(x1,y1,x2,y2,label){
-  const line = document.createElementNS(svgNS,'line'); line.setAttribute('class','m-line'); line.setAttribute('x1',x1); line.setAttribute('y1',y1); line.setAttribute('x2',x2); line.setAttribute('y2',y2);
-  const a1 = document.createElementNS(svgNS,'line'); a1.setAttribute('class','m-arrow'); a1.setAttribute('x1',x1); a1.setAttribute('y1',y1); a1.setAttribute('x2',x2); a1.setAttribute('y2',y2);
-  svg.appendChild(line); svg.appendChild(a1);
-  const cx = (x1+x2)/2, cy = (y1+y2)/2; labelBadge(cx, cy - 14, label);
-}
-function updateMeasureOverlay(){
-  // respetar toggle
-  if(!assetRoot) return;
-  if(dimsToggle && !dimsToggle.checked) return;
-
-  clearMeasureOverlay();
-  const box = new THREE.Box3().setFromObject(assetRoot);
-  const ctr = box.getCenter(new THREE.Vector3());
-  const sz  = box.getSize(new THREE.Vector3());
-
-  const frontZ = (camera.position.z >= ctr.z) ? box.max.z : box.min.z;
-  const leftX  = (camera.position.x >= ctr.x) ? box.min.x : box.max.x;
-  const rightX = (leftX===box.min.x) ? box.max.x : box.min.x;
-
-  const topY = box.max.y, botY = box.min.y;
-  const topL = new THREE.Vector3(leftX,  topY, frontZ);
-  const topR = new THREE.Vector3(rightX, topY, frontZ);
-  const botL = new THREE.Vector3(leftX,  botY, frontZ);
-  const back = (frontZ===box.max.z) ? box.min.z : box.max.z;
-  const botLBack = new THREE.Vector3(leftX, botY, back);
-
-  const off = 18; // px de separación del objeto
-  const p = v => projectToScreen(v);
-  const tL = p(topL), tR = p(topR), bL = p(botL), bLB = p(botLBack);
-
-  const cm = v => `${Math.round(v*100)} cm`;
-  if(tL.ok && tR.ok) drawDim(tL.x, tL.y - off, tR.x, tR.y - off, cm(sz.x)); // ancho
-  if(bL.ok && tL.ok) drawDim(bL.x - off, bL.y, tL.x - off, tL.y, cm(sz.y)); // alto
-  if(bL.ok && bLB.ok) drawDim(bL.x, bL.y + off, bLB.x, bLB.y + off, cm(sz.z)); // profundo
-}
-
 /* ---------- Sombras suaves (shadow catcher) ---------- */
-function setCastShadow(obj, val){
-  obj.traverse(o=>{ if(o.isMesh){ o.castShadow = !!val; }});
-}
+function setCastShadow(obj, val){ obj.traverse(o=>{ if(o.isMesh){ o.castShadow = !!val; }}); }
 function ensureShadowSystem(){
   if(!assetRoot) return;
 
   if(!dirLight){
     dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
     dirLight.castShadow = true;
-    dirLight.shadow.mapSize.set(1024,1024);
-    dirLight.shadow.bias = -0.0001;
-    dirLight.shadow.normalBias = 0.02;
+    dirLight.shadow.mapSize.set(2048,2048);
+    dirLight.shadow.bias = -0.00015;
+    dirLight.shadow.normalBias = 0.015;
     scene.add(dirLight);
   }
   if(!shadowPlane){
@@ -522,10 +461,16 @@ function ensureShadowSystem(){
   shadowPlane.position.set(ctr.x, box.min.y + 0.0001, ctr.z);
   shadowPlane.scale.set(size.x*1.05, size.z*1.05, 1);
 
-  // casi cenital; apenas desfasada para “dirección” de sombra
-  dirLight.position.set(ctr.x + size.x*0.3, box.max.y + size.y*2.0, ctr.z + size.z*0.05);
+  // inclinación suave (mover X/Z) y altura moderada
+  dirLight.position.set(ctr.x + size.x*0.25, box.max.y + size.y*1.4, ctr.z + size.z*0.25);
   dirLight.target.position.set(ctr.x, ctr.y, ctr.z);
   scene.add(dirLight.target);
+
+  // frustum centrado al asset para sombras suaves y densas
+  const cam = dirLight.shadow.camera;
+  const r = Math.max(size.x, size.z) * 0.65;
+  cam.left=-r; cam.right=r; cam.top=r; cam.bottom=-r; cam.near=0.1; cam.far=size.y * 4.0;
+  cam.updateProjectionMatrix();
 
   setCastShadow(assetRoot, true);
 }
@@ -564,18 +509,13 @@ function place(root){
 
   current = root; scene.add(root);
 
-  // detectar cualquier model_
+  // detectar model_
   assetRoot = null;
   current.traverse(o=>{ if(!assetRoot && o.name && /^model_/i.test(o.name)) assetRoot = o; });
 
   setUIMode(assetRoot ? 'asset' : 'room');
-  if(assetRoot){
-    setupAssetControlsMulti(current);
-    ensureShadowSystem();
-    updateMeasureOverlay();
-  }else{
-    removeAssetUI(); clearMeasureOverlay(); removeShadowSystem();
-  }
+  if(assetRoot){ setupAssetControlsMulti(current); ensureShadowSystem(); }
+  else{ removeAssetUI(); removeShadowSystem(); }
 
   const maxDim = Math.max(size.x,size.y,size.z);
   camera.position.setScalar(maxDim*1.6).setY(maxDim*0.8);
@@ -662,6 +602,7 @@ document.getElementById('fileBtn').onclick = ()=>{ fileInput.value=''; fileInput
 fileInput.onchange = ()=>{ const f=fileInput.files?.[0]; if(f) loadBlob(f); };
 document.getElementById('doorsToggle').onchange = e=> toggleDoors(e.target.checked);
 document.getElementById('hideCeilingToggle').onchange = e=>{ ceilings.forEach(c=> c.visible = !e.target.checked); };
+document.getElementById('autoRotateToggle').onchange = e=>{ controls.autoRotate = e.target.checked; };
 
 /* ---------- drag & drop ---------- */
 const drop=document.getElementById('drop');
@@ -690,13 +631,12 @@ function resize(){
   renderer.setSize(w,h,false);
   camera.aspect=w/h; camera.updateProjectionMatrix();
 }
-addEventListener('resize', ()=>{ resize(); updateMeasureOverlay(); ensureShadowSystem(); });
+addEventListener('resize', ()=>{ resize(); ensureShadowSystem(); });
 resize();
 
 renderer.setAnimationLoop(()=>{
   controls.update();
   updateAutoHide();
-  updateMeasureOverlay();
   ensureShadowSystem();
   renderer.render(scene,camera);
 });
