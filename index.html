@@ -143,7 +143,7 @@ function patchAlbedoAO(mat, strength, enabled){
     shader.fragmentShader = 'uniform float uAoStrength;\n' + shader.fragmentShader;
     shader.uniforms.uAoStrength = uRef;
 
-    // Leer AO sin tocar la iluminación del engine
+    // leer AO sin tocar la iluminación del engine
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <aomap_fragment>',
 `#ifdef USE_AOMAP
@@ -154,10 +154,10 @@ function patchAlbedoAO(mat, strength, enabled){
 `
     );
 
-    // Multiplicar el ALBEDO por AO con fuerza
+    // multiplicar albedo por pow(AO, strength)  (strength 0..10)
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <output_fragment>',
-`diffuseColor.rgb *= mix(1.0, ambientOcclusion, uAoStrength);
+`diffuseColor.rgb *= pow(ambientOcclusion, uAoStrength);
 #include <output_fragment>`
     );
   };
