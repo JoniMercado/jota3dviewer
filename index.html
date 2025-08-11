@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Room Viewer — v0.0.1</title>
 
-<!-- Import map para que "three" y addons funcionen en GitHub Pages -->
+<!-- Import map (GitHub Pages) -->
 <script type="importmap">
 {
   "imports": {
@@ -43,6 +43,7 @@
 
     <label><input type="checkbox" id="aoEnable" checked> AO × Albedo</label>
     <label>AO Strength <input type="range" id="aoStrength" min="0" max="1" step="0.01" value="0.6"></label>
+    <label><input type="checkbox" id="aoDebug"> AO Debug</label>
 
     <label>HDR
       <select id="hdrSelect">
@@ -179,12 +180,84 @@ function applyAOtoScene(strength, enabled){
   });
 }
 
+/* ---------- helpers: parent hardware → door root (mantener world transform) ---------- */
+function reparentKeepWorld(child, newParent){
+  // guardar TRS world del child
+  child.updateMatrixWorld(true);
+  newParent.updateMatrixWorld(true);
+
+  const wPos = new THREE.Vector3();
+  const wQuat = new THREE.Quaternion();
+  const wScl = new THREE.Vector3();
+  child.matrixWorld.decompose(wPos, wQuat, wScl);
+
+  // cambiar parent
+  newParent.add(child);
+
+  // convertir world→local respecto al nuevo parent
+  const pPos = new THREE.Vector3();
+  const pQuat = new THREE.Quaternion();
+  const pScl = new THREE.Vector3();
+  newParent.matrixWorld.decompose(pPos, pQuat, pScl);
+
+  const invP = new THREE.Matrix4().compose(pPos, pQuat, pScl).invert();
+  const mChildWorld = new THREE.Matrix4().compose(wPos, wQuat, wScl);
+  const mLocal = new THREE.Matrix4().multiplyMatrices(invP, mChildWorld);
+
+  const lPos = new THREE.Vector3();
+  const lQuat = new THREE.Quaternion();
+  const lScl = new THREE.Vector3();
+  mLocal.decompose(lPos, lQuat, lScl);
+
+  child.position.copy(lPos);
+  child.quaternion.copy(lQuat);
+  child.scale.copy(lScl);
+  child.updateMatrixWorld(true);
+}
+
+/* buscar índice (número) dentro del nombre: leftpanel12 -> 12 */
+function extractIndex(name){
+  const m = name?.match(/(\d+)/);
+  return m ? m[1] : null;
+}
+
+/* reparent hardware al root de la puerta por nombre (handle|hinge|knob|hardware) y matching de índice */
+function reparentHardwareToDoors(nodes, doorRoots){
+  const hardware = nodes.filter(o => /(handle|hinge|knob|hardware)/i.test(o.name));
+  const byIndex = new Map();
+  doorRoots.forEach(d=>{
+    const idx = extractIndex(d.name) ?? d.name;
+    byIndex.set(String(idx), d);
+  });
+  hardware.forEach(h=>{
+    const idx = extractIndex(h.name);
+    // buscar puerta con el mismo índice; si no hay, probamos proximidad (bbox overlap)
+    let target = idx!=null ? byIndex.get(String(idx)) : null;
+    if(!target){
+      // fallback: puerta más cercana por centro de bbox
+      let best=null, bestDist=Infinity;
+      const hp = new THREE.Vector3();
+      new THREE.Box3().setFromObject(h).getCenter(hp);
+      doorRoots.forEach(d=>{
+        const dp = new THREE.Vector3();
+        new THREE.Box3().setFromObject(d).getCenter(dp);
+        const dist = hp.distanceTo(dp);
+        if(dist<bestDist){ bestDist=dist; best=d; }
+      });
+      target = best;
+    }
+    if(target && h.parent !== target){
+      reparentKeepWorld(h, target);
+    }
+  });
+}
+
 /* ---------- placing ---------- */
 function place(root){
   // ocultar colliders
   root.traverse(o=>{ if(o.isMesh && /collider/i.test(o.name)) o.visible=false; });
 
-  // ocultar techos por defecto (checkbox empieza checked)
+  // ocultar techos por defecto
   root.traverse(o=>{ if(o.isMesh && /^ceiling\d*$/i.test(o.name)) o.visible = false; });
 
   // centrar y apoyar
@@ -197,10 +270,11 @@ function place(root){
   allNodes = [];
   root.traverse(o=>{ if(o.name) allNodes.push(o); });
 
+  // paredes y techos
   ceilings  = allNodes.filter(o => /^ceiling\d*$/i.test(o.name));
   wallRoots = allNodes.filter(o => /^wall\d+$/i.test(o.name));
 
-  // puertas (left/right panels) con pivote ya preparado en el glb
+  // puertas (root panels, sin hijos adicionales)
   const panels = allNodes.filter(o => /(leftpanel|rightpanel)\d+/i.test(o.name));
   doorPanels = panels.map(o=>{
     const left = /leftpanel/i.test(o.name);
@@ -209,14 +283,19 @@ function place(root){
     return o;
   });
 
-  // --- FIX AO: si hay aoMap pero no uv2, clonar uv -> uv2 ----
+  // reparent hardware a la puerta raíz para que pivoten juntos
+  reparentHardwareToDoors(allNodes, doorPanels);
+
+  // --- FIX AO: si hay aoMap pero no uv2, clonar uv -> uv2 ---
   root.traverse(o=>{
     if (!o.isMesh) return;
     const g = o.geometry;
     const mats = Array.isArray(o.material) ? o.material : [o.material];
     mats.forEach(m=>{
-      if (m && m.aoMap && g && !g.attributes.uv2 && g.attributes.uv) {
-        g.setAttribute('uv2', g.attributes.uv); // habilita USE_AOMAP
+      if (m && m.aoMap && g && !g.getAttribute('uv2') && g.getAttribute('uv')) {
+        const uv = g.getAttribute('uv');
+        g.setAttribute('uv2', new THREE.BufferAttribute(uv.array, 2, uv.normalized));
+        g.attributes.uv2.needsUpdate = true;
       }
     });
   });
@@ -232,6 +311,9 @@ function place(root){
   // AO inicial (multiplicador sobre albedo)
   applyAOtoScene(parseFloat(aoStrength.value), aoEnable.checked);
   updateStats(size);
+
+  // log rápida para verificar AO presentes
+  countAoMaps(root);
 }
 
 /* ---------- doors ---------- */
@@ -273,6 +355,38 @@ function updateAutoHide(){
   }
 }
 
+/* ---------- AO debug & counters ---------- */
+function countAoMaps(root){
+  let count=0;
+  root.traverse(o=>{
+    if(!o.isMesh) return;
+    const mats = Array.isArray(o.material)?o.material:[o.material];
+    mats.forEach(m=>{ if(m && m.aoMap) count++; });
+  });
+  console.log(`AO: ${count} materiales con aoMap`);
+}
+function setAODebug(enabled){
+  if(!current) return;
+  current.traverse(o=>{
+    if(!o.isMesh) return;
+    if(enabled){
+      if(o.userData._origMat) return;
+      const mats = Array.isArray(o.material)?o.material:[o.material];
+      const src = mats.find(m=>m && m.aoMap);
+      const dbg = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      if(src && src.aoMap) dbg.map = src.aoMap; else dbg.color.set(0x777777);
+      o.userData._origMat = o.material;
+      o.material = dbg; o.material.needsUpdate = true;
+    }else{
+      if(o.userData._origMat){
+        o.material = o.userData._origMat;
+        delete o.userData._origMat;
+        o.material.needsUpdate = true;
+      }
+    }
+  });
+}
+
 /* ---------- loading (con tamaño de GLB) ---------- */
 async function headSize(url){
   try{
@@ -306,6 +420,7 @@ fileInput.onchange = ()=>{ const f=fileInput.files?.[0]; if(f) loadBlob(f); };
 document.getElementById('doorsToggle').onchange = e=> toggleDoors(e.target.checked);
 const aoEnable   = document.getElementById('aoEnable');
 const aoStrength = document.getElementById('aoStrength');
+document.getElementById('aoDebug').onchange = e=> setAODebug(e.target.checked);
 aoEnable.onchange   = ()=> applyAOtoScene(parseFloat(aoStrength.value), aoEnable.checked);
 aoStrength.oninput  = ()=> applyAOtoScene(parseFloat(aoStrength.value), aoEnable.checked);
 
@@ -358,3 +473,4 @@ renderer.setAnimationLoop(()=>{
 </script>
 </body>
 </html>
+
