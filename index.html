@@ -8,13 +8,12 @@
   html,body{height:100%;margin:0}
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Helvetica,Arial,sans-serif;background:#0b0d10;color:#e6e6e6}
   #topbar{position:fixed;inset:12px 12px auto 12px;display:flex;gap:8px;align-items:center;background:rgba(20,22,26,.8);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:10px 12px;z-index:10}
-  #topbar input{width:360px;max-width:48vw;background:#0f1216;border:1px solid #2a2f36;color:#ddd;border-radius:10px;padding:8px 10px}
+  #topbar input{width:420px;max-width:60vw;background:#0f1216;border:1px solid #2a2f36;color:#ddd;border-radius:10px;padding:8px 10px}
   #topbar button{background:#1e68ff;border:none;color:white;padding:8px 12px;border-radius:10px;cursor:pointer}
-  #topbar small{opacity:.7}
+  #topbar small{opacity:.8}
   #stats{position:fixed;inset:auto 12px 12px 12px;background:rgba(20,22,26,.8);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:8px 12px;display:flex;gap:16px;flex-wrap:wrap}
-  #drop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;border:2px dashed #2a2f36;border-radius:16px;background:rgba(30,104,255,.08);color:#cfe0ff;pointer-events:auto}
+  #err{position:fixed;left:12px;right:12px;bottom:56px;white-space:pre-wrap;color:#ffb4b4}
   canvas{display:block;width:100%;height:100%}
-  a{color:#9ac1ff}
 </style>
 </head>
 <body>
@@ -26,7 +25,7 @@
     <small id="msg"></small>
   </div>
   <div id="stats"></div>
-  <div id="drop">Drop a .glb file to view</div>
+  <div id="err"></div>
   <canvas id="c"></canvas>
 
 <script type="module">
@@ -60,89 +59,93 @@ const ktx2  = new KTX2Loader().setTranscoderPath('https://unpkg.com/three@0.164/
 const loader = new GLTFLoader().setDRACOLoader(draco).setKTX2Loader(ktx2);
 
 let current;
-function clearModel(){ if(!current) return; scene.remove(current); current.traverse?.(o=>{ if(o.geometry) o.geometry.dispose(); if(o.material){ const m=o.material; (Array.isArray(m)?m:[m]).forEach(mm=>{ for(const k of ['map','normalMap','roughnessMap','metalnessMap','occlusionMap','emissiveMap']) if(mm[k]) mm[k].dispose(); }); }}); current=null; }
-function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geometry; if(g?.index) t+=g.index.count/3; else if(g?.attributes?.position) t+=g.attributes.position.count/3; }}); return Math.round(t); }
+function clearModel(){
+  if(!current) return;
+  scene.remove(current);
+  current.traverse?.(o=>{
+    if(o.geometry) o.geometry.dispose();
+    const m=o.material;
+    (Array.isArray(m)?m:[m]).forEach(mm=>{
+      ['map','normalMap','roughnessMap','metalnessMap','occlusionMap','emissiveMap'].forEach(k=>mm && mm[k] && mm[k].dispose());
+    });
+  });
+  current=null;
+}
+function triCount(obj){
+  let t=0; obj.traverse(o=>{
+    if(o.isMesh){ const g=o.geometry;
+      if(g?.index) t+=g.index.count/3;
+      else if(g?.attributes?.position) t+=g.attributes.position.count/3;
+    }
+  }); return Math.round(t);
+}
 function place(root){
+  // center and sit on ground
   new THREE.Box3().setFromObject(root).getCenter(root.position).multiplyScalar(-1);
   const box=new THREE.Box3().setFromObject(root); const size=box.getSize(new THREE.Vector3());
   root.position.y -= box.min.y;
   current=root; scene.add(root);
-  document.getElementById('stats').textContent = `Approx. tris: ${triCount(root).toLocaleString()} | Size: ${size.x.toFixed(2)} × ${size.y.toFixed(2)} × ${size.z.toFixed(2)} m`;
+  // stats
+  byId('stats').textContent = `Approx. tris: ${triCount(root).toLocaleString()} | Size: ${size.x.toFixed(2)} × ${size.y.toFixed(2)} × ${size.z.toFixed(2)} m`;
+  // frame
   const maxDim=Math.max(size.x,size.y,size.z);
   camera.position.setScalar(maxDim*1.6).setY(maxDim*0.8);
   controls.target.copy(new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3()));
   controls.update();
 }
+function setMsg(t){ byId('msg').textContent=t||''; }
+function setErr(t){ byId('err').textContent=t||''; }
+function byId(id){ return document.getElementById(id); }
+
 function loadFromURL(url){
-  setMsg('Loading…'); clearModel();
+  setErr(''); setMsg('Loading…'); clearModel();
   loader.load(url, g=>{ place(g.scene); setMsg('Loaded'); }, xhr=>{
     if(xhr.total) setMsg(`Loading ${(xhr.loaded/xhr.total*100).toFixed(0)}%`);
-  }, err=>{ setMsg('Error loading model'); console.error(err); });
-}
-function loadBlob(file){
-  setMsg('Loading local file…'); clearModel();
-  const url = URL.createObjectURL(file);
-  loader.load(url, g=>{ place(g.scene); setMsg(file.name); URL.revokeObjectURL(url); }, undefined, e=>{ setMsg('Error with local file'); console.error(e); });
+  }, err=>{ console.error(err); setMsg(''); setErr('Error loading model URL (CORS or invalid URL).'); });
 }
 
-function resize(){ const w=innerWidth,h=innerHeight; renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
-addEventListener('resize', resize);
-
-// UI
-const urlInput=document.getElementById('url');
-document.getElementById('loadBtn').onclick=()=>{ if(urlInput.value) loadFromURL(urlInput.value.trim()); };
-document.getElementById('fileBtn').onclick=()=>{ const inp=document.createElement('input'); inp.type='file'; inp.accept='.glb,model/gltf-binary'; inp.onchange=()=>{ const f=inp.files?.[0]; if(f) loadBlob(f); }; inp.click(); };
-function setMsg(t){ document.getElementById('msg').textContent=t||''; }
-
-// Reemplazar ESTA función:
-async function loadBlob(file){
-  try {
-    setMsg('Loading local file…'); 
-    clearModel();
-
-    // Leer el archivo como ArrayBuffer y parsearlo directamente
+// Robust local file load (no object URLs)
+async function loadLocalFile(file){
+  try{
+    setErr(''); setMsg('Reading local file…'); clearModel();
     const buffer = await file.arrayBuffer();
-    loader.parse(
-      buffer,
-      '',                     // path base (vacío para glb)
-      (gltf) => {
-        place(gltf.scene);
-        setMsg(file.name);
-      },
-      (err) => {
-        console.error(err);
-        setMsg('Error parsing local GLB');
-      }
-    );
-  } catch (e) {
+    loader.parse(buffer, '', gltf=>{
+      place(gltf.scene);
+      setMsg(file.name);
+    }, err=>{
+      console.error(err);
+      setMsg('');
+      setErr('Error parsing local GLB.');
+    });
+  }catch(e){
     console.error(e);
-    setMsg('Error reading local file');
+    setMsg('');
+    setErr('Error reading local file.');
   }
 }
 
-  
-// Drag & drop (window/document/body + overlay)
-function prevent(e){ e.preventDefault(); e.stopPropagation(); }
-['dragenter','dragover','dragleave','drop'].forEach(ev=>{
-  window.addEventListener(ev, prevent, false);
-  document.addEventListener(ev, prevent, false);
-  document.body.addEventListener(ev, prevent, false);
-});
-const drop=document.getElementById('drop');
-window.addEventListener('dragenter', ()=> drop.style.display='flex');
-window.addEventListener('dragover',  ()=> drop.style.display='flex');
-window.addEventListener('dragleave', e=>{
-  if(e.clientX<=0||e.clientY<=0||e.clientX>=innerWidth||e.clientY>=innerHeight){ drop.style.display='none'; }
-});
-function handleDrop(e){ drop.style.display='none'; const f=e.dataTransfer?.files?.[0]; if(f) loadBlob(f); }
-drop.addEventListener('drop', handleDrop);
-document.addEventListener('drop', handleDrop);
+// UI
+byId('loadBtn').onclick=()=>{
+  const u = byId('url').value.trim();
+  if(u) loadFromURL(u);
+};
+byId('fileBtn').onclick=()=>{
+  const inp=document.createElement('input');
+  inp.type='file';
+  inp.accept='.glb,model/gltf-binary,model/gltf+binary,application/octet-stream';
+  inp.onchange=()=>{ const f=inp.files?.[0]; if(f) loadLocalFile(f); };
+  inp.click();
+};
 
 // URL param ?model=
 const modelURL=new URLSearchParams(location.search).get('model');
-if(modelURL){ urlInput.value=modelURL; loadFromURL(modelURL); }
+if(modelURL){ byId('url').value=modelURL; loadFromURL(modelURL); }
 
+// resize + render loop
+function resize(){ const w=innerWidth,h=innerHeight; renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize);
 renderer.setAnimationLoop(()=>{ controls.update(); renderer.render(scene,camera); });
 </script>
 </body>
 </html>
+
