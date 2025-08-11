@@ -94,6 +94,33 @@ document.getElementById('loadBtn').onclick=()=>{ if(urlInput.value) loadFromURL(
 document.getElementById('fileBtn').onclick=()=>{ const inp=document.createElement('input'); inp.type='file'; inp.accept='.glb,model/gltf-binary'; inp.onchange=()=>{ const f=inp.files?.[0]; if(f) loadBlob(f); }; inp.click(); };
 function setMsg(t){ document.getElementById('msg').textContent=t||''; }
 
+// Reemplazar ESTA función:
+async function loadBlob(file){
+  try {
+    setMsg('Loading local file…'); 
+    clearModel();
+
+    // Leer el archivo como ArrayBuffer y parsearlo directamente
+    const buffer = await file.arrayBuffer();
+    loader.parse(
+      buffer,
+      '',                     // path base (vacío para glb)
+      (gltf) => {
+        place(gltf.scene);
+        setMsg(file.name);
+      },
+      (err) => {
+        console.error(err);
+        setMsg('Error parsing local GLB');
+      }
+    );
+  } catch (e) {
+    console.error(e);
+    setMsg('Error reading local file');
+  }
+}
+
+  
 // Drag & drop (window/document/body + overlay)
 function prevent(e){ e.preventDefault(); e.stopPropagation(); }
 ['dragenter','dragover','dragleave','drop'].forEach(ev=>{
