@@ -17,20 +17,58 @@
 <style>
   html,body{height:100%;margin:0}
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Helvetica,Arial,sans-serif;background:#c9c9c9;color:#222}
-  #topbar{position:fixed;inset:12px 12px auto 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:rgba(255,255,255,.85);backdrop-filter:blur(6px);border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:10px 12px;z-index:10}
+
+  /* Header fijo y compacto */
+  #topbar{
+    position:fixed;inset:12px auto auto 12px;
+    display:flex;gap:8px;flex-wrap:wrap;align-items:center;
+    background:rgba(255,255,255,.85);backdrop-filter:blur(6px);
+    border:1px solid rgba(0,0,0,.08);border-radius:12px;
+    padding:10px 12px;z-index:10;max-width:min(900px, calc(100% - 312px));
+  }
   #topbar input,#topbar select{background:#f5f5f5;border:1px solid #ccc;color:#111;border-radius:6px;padding:6px 8px}
   #topbar button{background:#1e68ff;border:none;color:white;padding:6px 10px;border-radius:6px;cursor:pointer}
   #topbar small{opacity:.7}
   #fileInput{display:none}
-  #stats{position:fixed;inset:auto 12px 12px 12px;background:rgba(255,255,255,.85);border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:8px 12px;display:flex;gap:16px;flex-wrap:wrap}
+
+  /* Panel lateral derecho (animaciones y más) */
+  #sidepanel{
+    position:fixed;right:12px;top:12px;
+    width:280px;max-height:calc(100% - 24px);overflow:auto;
+    display:flex;flex-direction:column;gap:8px;
+    z-index:9; /* debajo del header (10) para que no lo tape al abrir combos del header */
+  }
+  .card{
+    background:rgba(255,255,255,.9);backdrop-filter:blur(6px);
+    border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:10px 12px;
+  }
+  details.asset-anim{border:1px solid rgba(0,0,0,.08);border-radius:10px;background:#fff}
+  details.asset-anim > summary{
+    list-style:none;cursor:pointer;padding:8px 10px;border-radius:10px;
+    background:#f9f9f9;border:1px solid rgba(0,0,0,.06);
+    font-weight:600;font-size:14px;
+  }
+  details.asset-anim[open] > summary{background:#f3f6ff;border-color:#ccd9ff}
+  .anim-panel{padding:8px 10px}
+  .anim-group{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
+  .anim-group-name{font-size:12px;opacity:.8;padding:2px 6px;background:#f2f2f2;border-radius:6px}
+  .anim-slider{width:160px}
+  .muted{opacity:.7;font-size:12px}
+
+  #stats{
+    position:fixed;inset:auto 12px 12px 12px;
+    background:rgba(255,255,255,.85);border:1px solid rgba(0,0,0,.08);
+    border-radius:12px;padding:8px 12px;display:flex;gap:16px;flex-wrap:wrap
+  }
   #drop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;border:2px dashed #2a2f36;border-radius:16px;background:rgba(30,104,255,.08);color:#1e68ff;pointer-events:auto}
   canvas{display:block;width:100%;height:100%}
   label{display:flex;align-items:center;gap:6px}
-  /* mini estilos para panel Anim */
-  details.asset-anim{padding:4px 8px;border:1px solid rgba(0,0,0,.08);border-radius:8px;background:#fff}
-  .anim-group{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap}
-  .anim-group-name{font-size:12px;opacity:.8;padding:2px 6px;background:#f2f2f2;border-radius:6px}
-  .anim-slider{width:160px}
+
+  /* Responsive: si la pantalla es estrecha, que el sidepanel se achique y no tape el header */
+  @media (max-width: 960px){
+    #topbar{max-width:calc(100% - 24px)}
+    #sidepanel{width:240px}
+  }
 </style>
 </head>
 <body>
@@ -40,9 +78,11 @@
     <button id="loadBtn">Load</button>
     <button id="fileBtn">Open .glb</button>
     <input type="file" id="fileInput" accept=".glb,model/gltf-binary" />
+
     <label><input type="checkbox" id="doorsToggle"> All Doors Open</label>
     <label><input type="checkbox" id="autoHideToggle" checked> Auto-hide front wall</label>
     <label><input type="checkbox" id="hideCeilingToggle" checked> Hide ceiling</label>
+
     <label>HDR
       <select id="hdrSelect">
         <option value="">Room (default)</option>
@@ -52,6 +92,12 @@
     </label>
     <small id="msg"></small>
   </div>
+
+  <!-- Panel lateral derecho (aquí van animaciones y futuros módulos) -->
+  <div id="sidepanel">
+    <!-- Ejemplo: podríamos colocar otras tarjetas acá en el futuro -->
+  </div>
+
   <div id="stats"></div>
   <div id="drop">Drop a .glb file to view</div>
   <canvas id="c"></canvas>
@@ -101,10 +147,10 @@ let lastHiddenWalls = new Set(); // auto-hide
 let lastGLBBytes = null;         // peso del GLB
 const MAX_DOOR_DEG = 90;
 
-// Asset detection + anim UI (multi-grupo)
+// Asset detection + anim UI (multi-grupo en sidepanel)
 let assetRoot = null;
 let isAsset   = false;
-let uiAssetWrap = null; // <details> contenedor del panel
+let uiAssetWrap = null; // <details> que contiene todo el panel de anim
 let animGroups = [];    // [{name, meshes, morphNames, activeMorph, selectEl, sliderEl}]
 
 /* ---------- utils ---------- */
@@ -170,7 +216,7 @@ function doorGroupKey(name){
   return name.toLowerCase();
 }
 
-/* ---------- UI Anim (shape keys) multi-grupo ---------- */
+/* ---------- UI Anim (shape keys) multi-grupo en sidepanel ---------- */
 function removeAssetUI(){
   animGroups = [];
   assetRoot  = null;
@@ -210,25 +256,28 @@ function findAnimRoots(asset){
       animRoots.push(o);
     }
   });
-  // Evitar incluir el asset root si lo llamaron "anim_*" (infrecuente)
   return animRoots.filter(o=> o !== asset);
 }
 function buildAnimUI(){
-  const topbar = document.getElementById('topbar');
+  const side = document.getElementById('sidepanel');
+  // contenedor plegable único para Anim
   uiAssetWrap = document.createElement('details');
-  uiAssetWrap.className = 'asset-anim';
-  uiAssetWrap.open = false;
+  uiAssetWrap.className = 'asset-anim card';
+  uiAssetWrap.open = true;
 
-  const sum = document.createElement('summary');
-  sum.textContent = 'Anim';
-  uiAssetWrap.appendChild(sum);
+  const summary = document.createElement('summary');
+  summary.textContent = 'Anim';
+  uiAssetWrap.appendChild(summary);
 
-  // etiqueta “Asset”
-  const tag = document.createElement('small');
-  tag.textContent = 'Asset';
-  tag.style.opacity = '0.7';
-  tag.style.marginLeft = '8px';
-  uiAssetWrap.appendChild(tag);
+  const inner = document.createElement('div');
+  inner.className = 'anim-panel';
+  uiAssetWrap.appendChild(inner);
+
+  // info ligera
+  const info = document.createElement('div');
+  info.className = 'muted';
+  info.textContent = 'Control de shape keys por grupo (prefijo anim_)';
+  inner.appendChild(info);
 
   // grupos
   animGroups.forEach(group=>{
@@ -284,9 +333,9 @@ function buildAnimUI(){
     row.appendChild(slider);
     group.sliderEl = slider;
 
-    uiAssetWrap.appendChild(row);
+    inner.appendChild(row);
 
-    // estado inicial de slider
+    // estado inicial de slider/selector
     const m0 = group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
     if(m0){
       const i = m0.morphTargetDictionary[group.activeMorph];
@@ -298,7 +347,7 @@ function buildAnimUI(){
     }
   });
 
-  topbar.appendChild(uiAssetWrap);
+  side.appendChild(uiAssetWrap);
 }
 function setupAssetControlsMulti(rootScene){
   // Buscar hijo cuyo nombre empiece por model_
