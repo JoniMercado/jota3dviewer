@@ -499,7 +499,7 @@ function updateAutoHide(){
   for(const wr of Array.from(lastHiddenWalls)){
     if(!front.has(wr)){ wr.visible = true; lastHiddenWalls.delete(wr); }
   }
-  for(const wr of front)){
+  for(const wr of front){
     if(!lastHiddenWalls.has(wr)){ wr.visible = false; lastHiddenWalls.add(wr); }
   }
 }
