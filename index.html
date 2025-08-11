@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Minimal three.js GLB Viewer (Smart)</title>
+<title>three.js GLB Viewer — Smart + Tools</title>
 <style>
   html,body{height:100%;margin:0}
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Helvetica,Arial,sans-serif;background:#0b0d10;color:#e6e6e6}
@@ -16,7 +16,6 @@
   canvas{display:block;width:100%;height:100%}
 </style>
 
-<!-- Import map: resuelve 'three' y 'three/addons/' que usan los loaders -->
 <script type="importmap">
 {
   "imports": {
@@ -43,69 +42,56 @@ import * as THREE from 'three';
 import { GLTFLoader }     from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader }    from 'three/addons/loaders/DRACOLoader.js';
 import { KTX2Loader }     from 'three/addons/loaders/KTX2Loader.js';
+import { RGBELoader }     from 'three/addons/loaders/RGBELoader.js';
 import { OrbitControls }  from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment }from 'three/addons/environments/RoomEnvironment.js';
 import GUI from 'https://unpkg.com/lil-gui@0.19/dist/lil-gui.esm.js';
 
-/* ---------- base viewer ---------- */
+/* --- renderer / scene / camera --- */
 const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 100);
 camera.position.set(2, 1.2, 2);
 
 const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+let currentEnv = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environment = currentEnv;
+renderer.setClearColor(new THREE.Color('#0b0d10'));
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 0.6, 0);
 controls.enableDamping = true;
 
-/* loaders */
+/* --- loaders --- */
 const draco = new DRACOLoader().setDecoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/draco/');
 const ktx2  = new KTX2Loader().setTranscoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/basis/').detectSupport(renderer);
 const loader = new GLTFLoader().setDRACOLoader(draco).setKTX2Loader(ktx2);
 
-/* lights + shadow catcher */
-const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+/* --- iluminación integral (no direccional) --- */
+const hemi = new THREE.HemisphereLight(0xffffff, 0x404040, 0.9);
 scene.add(hemi);
-const sun = new THREE.DirectionalLight(0xffffff, 2.0);
-sun.position.set(3, 6, 3);
-sun.castShadow = true;
-sun.shadow.mapSize.set(2048,2048);
-sun.shadow.camera.near = 0.1;
-sun.shadow.camera.far = 50;
-sun.shadow.radius = 2;
-scene.add(sun);
+const amb  = new THREE.AmbientLight(0xffffff, 0.25);
+scene.add(amb);
 
-const groundMat = new THREE.ShadowMaterial({ opacity: 0.25 });
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(50,50), groundMat);
-ground.rotation.x = -Math.PI/2;
-ground.receiveShadow = true;
-scene.add(ground);
-
-/* helpers */
-let current;
+/* --- helpers --- */
+let current, lastGLTF=null;
 function disposeMat(m){ ['map','normalMap','roughnessMap','metalnessMap','occlusionMap','emissiveMap'].forEach(k=>m[k]?.dispose?.()); }
 function clearModel(){
   if(!current) return;
   scene.remove(current);
   current.traverse?.(o=>{ if(o.geometry) o.geometry.dispose(); const m=o.material; if(m) (Array.isArray(m)?m:[m]).forEach(disposeMat); });
-  current = null;
+  current = null; lastGLTF=null;
 }
 function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geometry; if(g?.index) t+=g.index.count/3; else if(g?.attributes?.position) t+=g.attributes.position.count/3; }}); return Math.round(t); }
-function setShadowFlags(root, cast=true, receive=false){ root.traverse(o=>{ if(o.isMesh){ o.castShadow = cast; o.receiveShadow = receive; } }); }
 
-/* base place() */
+/* --- place() base --- */
 function place(root){
-  // centrar y apoyar en el piso
   new THREE.Box3().setFromObject(root).getCenter(root.position).multiplyScalar(-1);
   const box = new THREE.Box3().setFromObject(root);
   const size = box.getSize(new THREE.Vector3());
@@ -113,32 +99,37 @@ function place(root){
 
   current = root; scene.add(root);
 
-  // stats
   document.getElementById('stats').textContent =
     `Approx. tris: ${triCount(root).toLocaleString()} | Size: ${size.x.toFixed(2)} × ${size.y.toFixed(2)} × ${size.z.toFixed(2)} m`;
 
-  // frame
   const maxDim = Math.max(size.x,size.y,size.z);
   camera.position.setScalar(maxDim*1.6).setY(maxDim*0.8);
   controls.target.copy(new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3()));
   controls.update();
+
+  buildVariantsGUI(); // si aplica
 }
 
-/* ---------- inteligencia por nombres ---------- */
-/* indexación */
+/* --- inteligencia por nombres --- */
+const NAME = {
+  wall:        (n)=>/^wall\d+$/i.test(n),          // solo nodos raiz wallN
+  iwall:       (n)=>/^interiorwall\d+$/i.test(n),
+  ceiling:     (n)=>/^ceiling\d+$/i.test(n),
+  floor:       (n)=>/^floor\d+$/i.test(n),
+  doorPanel:   (n)=>/(^|_)((leftpanel|rightpanel)\d+)$/i.test(n) // solo paneles, no hijos
+};
+
 function flatten(root){ const list=[]; root.traverse(o=>{ if(o.name) list.push(o); }); return list; }
-function byName(list, rx){ return list.filter(o => rx.test(o.name)); }
+function byNameExact(list, pred){ return list.filter(o => pred(o.name)); }
 
 /* puertas */
 function prepDoorPanels(list){
   const doors=[];
   list.forEach(o=>{
-    const m = o.name.match(/(leftpanel|rightpanel)\d+/i);
-    if(!m) return;
-    const side = m[1].toLowerCase(); // leftpanel | rightpanel
+    // asegurar que no sean hijos de otras piezas con nombres compuestos
+    const side = /leftpanel/i.test(o.name) ? 'left' : 'right';
     o.userData.closedQ = o.quaternion.clone();
-    o.userData.hinge   = 'y';
-    o.userData.sign    = side === 'leftpanel' ? +1 : -1; // +Y izquierda, -Y derecha
+    o.userData.sign    = side === 'left' ? +1 : -1; // +Y izq, -Y der
     doors.push(o);
   });
   return doors;
@@ -149,38 +140,38 @@ function setDoorAmount(o, amt){
   o.quaternion.copy(o.userData.closedQ);
   o.rotateY(rad);
 }
-function tween(durationMs, updater, onDone){
-  const t0 = performance.now();
-  const step = (t)=>{
-    const k = Math.min(1, (t - t0)/durationMs);
-    updater(k);
-    if(k < 1) requestAnimationFrame(step); else onDone && onDone();
-  };
-  requestAnimationFrame(step);
-}
 
-/* estado de estructura */
+/* auto-hide wall */
+const raycaster = new THREE.Raycaster();
+let autoHideWall = { enabled:false, hidden:null };
+
+/* estado / GUI */
 let STRUCT=null, DOORS=[];
 function setGroupVisible(nodes, v){ nodes.forEach(n=> n.visible=v); }
 
-/* envolvemos place para construir estructura/GUI por modelo */
+/* envolver place para construir estructura + GUI por modelo */
 const _placeOrig = place;
 place = (root)=>{
   _placeOrig(root);
 
   const all       = flatten(root);
-  const walls     = byName(all, /(^|_)wall\d+/i);
-  const iWalls    = byName(all, /(^|_)interiorwall\d+/i);
-  const ceilings  = byName(all, /(^|_)ceiling\d+/i);
-  const floors    = byName(all, /(^|_)floor\d+/i);
-  const colliders = byName(all, /collider/i);
-  const panels    = byName(all, /(leftpanel|rightpanel)\d+/i);
+
+  // colecciones SOLO en nodos raíz que coincidan exactamente (sin children ni nombres compuestos)
+  const walls     = byNameExact(all, NAME.wall);
+  const iWalls    = byNameExact(all, NAME.iwall);
+  const ceilings  = byNameExact(all, NAME.ceiling);
+  const floors    = byNameExact(all, NAME.floor);
+  const panels    = byNameExact(all, NAME.doorPanel);
   DOORS = prepDoorPanels(panels);
+
+  // colliders (por nombre, cualquiera)
+  const colliders = all.filter(o => /collider/i.test(o.name));
 
   STRUCT = {
     walls, iWalls, ceilings, floors, colliders,
     show: { walls:true, iWalls:true, ceilings:true, floors:true, colliders:false },
-    doorAmount: 0
+    doorsOpen: false,
+    allNodes: all
   };
 
   setGroupVisible(walls,     STRUCT.show.walls);
@@ -191,15 +182,26 @@ place = (root)=>{
 
   buildStructureGUI();
   buildDoorsGUI();
-
-  // acomodar piso bajo el modelo y activar sombras en mallas
-  const box = new THREE.Box3().setFromObject(root);
-  ground.position.y = box.min.y + 0.001;
-  setShadowFlags(root, true, false);
+  buildIsolateGUI();
 };
 
-/* GUI: estructura */
-let gui = new GUI({ title:'Viewer Settings', width:320 });
+function updateAutoHideWall(){
+  if(!autoHideWall.enabled || !STRUCT?.walls?.length || !current) return;
+  const dir = new THREE.Vector3().subVectors(controls.target, camera.position).normalize();
+  raycaster.set(camera.position, dir);
+  const hits = raycaster.intersectObjects(STRUCT.walls, true);
+  const first = hits.find(h => h.object.visible !== false);
+  const newWall = first ? findAncestorInSet(first.object, new Set(STRUCT.walls)) : null;
+  if(newWall !== autoHideWall.hidden){
+    if(autoHideWall.hidden) autoHideWall.hidden.visible = true;
+    autoHideWall.hidden = newWall;
+    if(autoHideWall.hidden) autoHideWall.hidden.visible = false;
+  }
+}
+function findAncestorInSet(obj,set){ let p=obj; while(p && !set.has(p)) p=p.parent; return p||null; }
+
+/* ---------- GUI ---------- */
+const gui = new GUI({ title:'Viewer', width:330 });
 gui.domElement.style.position='fixed';
 gui.domElement.style.right='12px';
 gui.domElement.style.top='12px';
@@ -221,22 +223,14 @@ const params = {
   fov: camera.fov,
   autoRotate: false,
   autoRotateSpeed: 1.0,
-  floorShadow: true,
-  sunIntensity: 2.0,
-  hemiIntensity: 0.6,
-  resetCamera(){
-    controls.reset();
-    camera.fov = 45; camera.updateProjectionMatrix();
-    renderer.setPixelRatio(params.highQuality ? Math.min(devicePixelRatio,2) : 1);
-  },
-  screenshot(){
-    const a=document.createElement('a');
-    a.href=renderer.domElement.toDataURL('image/png');
-    a.download='screenshot.png'; a.click();
-  }
+  autoHideWall: false,
+  env: 'Room',
+  envURL: '',
+  isolateQuery: ''
 };
+
 const fRender = gui.addFolder('Render');
-fRender.add(params, 'exposure', 0.2, 2.5, 0.01).onChange(v=> renderer.toneMappingExposure = v);
+fRender.add(params, 'exposure', 0.2, 2.5, 0.01).onChange(v=> renderer.toneMappingExposure=v);
 fRender.add(params, 'toneMapping', Object.keys(ToneMapByName)).onChange(n=> renderer.toneMapping = ToneMapByName[n]);
 fRender.addColor(params, 'background').onChange(v=> renderer.setClearColor(new THREE.Color(v)));
 fRender.add(params, 'highQuality').name('High quality (HiDPI)').onChange(v=> renderer.setPixelRatio(v ? Math.min(devicePixelRatio,2) : 1));
@@ -248,20 +242,15 @@ fRender.add(params, 'wireframe').onChange(v=>{
     }
   });
 });
-fRender.add(params, 'screenshot').name('Save PNG');
 
 const fCam = gui.addFolder('Camera');
 fCam.add(params, 'fov', 20, 90, 1).onChange(v=>{ camera.fov=v; camera.updateProjectionMatrix(); });
-fCam.add(params, 'autoRotate').onChange(v=> controls.autoRotate = v);
-fCam.add(params, 'autoRotateSpeed', -5, 5, 0.1).onChange(v=> controls.autoRotateSpeed = v);
-fCam.add(params, 'resetCamera').name('Reset');
+fCam.add(params, 'autoRotate').onChange(v=> controls.autoRotate=v);
+fCam.add(params, 'autoRotateSpeed', -5, 5, 0.1).onChange(v=> controls.autoRotateSpeed=v);
 
-const fLight = gui.addFolder('Lighting');
-fLight.add(params, 'floorShadow').name('Floor shadow').onChange(v=>{ ground.visible=v; groundMat.opacity = v ? 0.25 : 0.0; });
-fLight.add(params, 'sunIntensity', 0, 5, 0.1).onChange(v=> sun.intensity=v);
-fLight.add(params, 'hemiIntensity', 0, 2, 0.1).onChange(v=> hemi.intensity=v);
+/* Structure */
+let _guiStructFolder=null, _guiDoorsFolder=null, _guiEnvFolder=null, _guiVariantsFolder=null, _guiIsolateFolder=null;
 
-let _guiStructFolder=null, _guiDoorsFolder=null;
 function buildStructureGUI(){
   _guiStructFolder?.destroy?.();
   _guiStructFolder = gui.addFolder('Structure');
@@ -271,50 +260,124 @@ function buildStructureGUI(){
   _guiStructFolder.add(S, 'ceilings').name('Ceilings on').onChange(v=> setGroupVisible(STRUCT.ceilings, v));
   _guiStructFolder.add(S, 'floors').name('Floors on').onChange(v=> setGroupVisible(STRUCT.floors, v));
   _guiStructFolder.add(S, 'colliders').name('Colliders on').onChange(v=> setGroupVisible(STRUCT.colliders, v));
+  _guiStructFolder.add(params, 'autoHideWall').name('Auto-hide front wall').onChange(v=>{
+    autoHideWall.enabled = v;
+    if(!v && autoHideWall.hidden){ autoHideWall.hidden.visible = true; autoHideWall.hidden=null; }
+  });
 }
 
-/* GUI: puertas */
-function setAllDoors(amount, animate=true){
-  STRUCT.doorAmount = amount;
-  DOORS.forEach(o=>{
-    if(animate){
-      const start = 0; // simple: arranca de 0; podrías guardar estado actual si querés suave
-      tween(250, k => setDoorAmount(o, start + (amount - start)*k));
-    }else{
-      setDoorAmount(o, amount);
-    }
-  });
+/* Doors — toggle on/off */
+function setAllDoorsOpen(open){
+  const amt = open ? 1 : 0;
+  DOORS.forEach(o=> setDoorAmount(o, amt));
 }
 function buildDoorsGUI(){
   _guiDoorsFolder?.destroy?.();
   _guiDoorsFolder = gui.addFolder('Doors');
-  _guiDoorsFolder.add(STRUCT, 'doorAmount', 0, 1, 0.01).name('All doors open').onChange(v=> setAllDoors(v, false));
-  // sliders por panel detectado
-  DOORS.forEach((o)=>{
+  _guiDoorsFolder.add(STRUCT, 'doorsOpen').name('All doors open').onChange(v=> setAllDoorsOpen(v));
+  // sliders individuales (opcional, dejalos para control fino)
+  DOORS.forEach(o=>{
     const obj = { open: 0 };
     _guiDoorsFolder.add(obj, 'open', 0, 1, 0.01).name(o.name).onChange(v=> setDoorAmount(o, v));
   });
 }
 
-/* ---------- UI carga ---------- */
-function setMsg(t){ document.getElementById('msg').textContent = t || ''; }
+/* Environment / HDRI */
+async function setEnvironmentHDR(url){
+  try{
+    const tex = await new RGBELoader().setDataType(THREE.UnsignedByteType).loadAsync(url);
+    const env = pmrem.fromEquirectangular(tex).texture;
+    tex.dispose();
+    scene.environment = env;
+    currentEnv = env;
+  }catch(e){ console.error('HDR load error', e); }
+}
+function buildEnvGUI(){
+  _guiEnvFolder?.destroy?.();
+  _guiEnvFolder = gui.addFolder('Environment');
+  const presets = ['Room','Neutral Grey (HDR)','Studio Small (HDR)','Custom URL'];
+  _guiEnvFolder.add(params, 'env', presets).onChange(async v=>{
+    if(v==='Room'){
+      scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    } else if(v==='Neutral Grey (HDR)'){
+      await setEnvironmentHDR('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/neutral_wall_1k.hdr');
+    } else if(v==='Studio Small (HDR)'){
+      await setEnvironmentHDR('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_small_03_1k.hdr');
+    } else {
+      if(params.envURL) await setEnvironmentHDR(params.envURL);
+    }
+  });
+  _guiEnvFolder.add(params, 'envURL').name('HDR URL').onFinishChange(async v=>{
+    params.env='Custom URL';
+    await setEnvironmentHDR(v);
+  });
+}
+buildEnvGUI();
 
-function loadFromURL(url){
-  setMsg('Loading…'); clearModel();
-  loader.load(url, g=>{ place(g.scene); setMsg('Loaded'); }, xhr=>{
-    if(xhr.total) setMsg(`Loading ${(xhr.loaded/xhr.total*100).toFixed(0)}%`);
-  }, err=>{ console.error(err); setMsg('Error loading model (CORS o URL inválida)'); });
+/* Variants (KHR_materials_variants) */
+function buildVariantsGUI(){
+  _guiVariantsFolder?.destroy?.();
+  const ext = lastGLTF?.parser?.extensions?.KHR_materials_variants;
+  if(!ext) return;
+  _guiVariantsFolder = gui.addFolder('Variants');
+  const names = ext.variants?.map(v=>v.name) || [];
+  const sel = { variant: names[0] || '' };
+  if(!names.length) return;
+  _guiVariantsFolder.add(sel, 'variant', names).onChange(name=>{
+    try{ ext.selectVariant(current, name); }catch(e){ console.warn('Variant switch error', e); }
+  });
 }
 
+/* Isolate */
+function buildIsolateGUI(){
+  _guiIsolateFolder?.destroy?.();
+  _guiIsolateFolder = gui.addFolder('Isolate');
+  const api = {
+    query: '',
+    isolate(){
+      if(!STRUCT?.allNodes) return;
+      const rx = new RegExp(api.query, 'i');
+      const keep = STRUCT.allNodes.filter(n=> rx.test(n.name));
+      const keepSet = new Set(keep);
+      current.traverse(o=>{
+        let visible = keepSet.has(o);
+        // mantener ancestros de keep
+        keep.forEach(n=>{
+          let p=n.parent; while(p){ if(p===o) visible=true; p=p.parent; }
+        });
+        if(o!==current) o.visible = visible;
+      });
+    },
+    clear(){
+      if(!current) return;
+      current.traverse(o=> o.visible=true);
+    }
+  };
+  _guiIsolateFolder.add(api, 'query').name('Name contains');
+  _guiIsolateFolder.add(api, 'isolate').name('Apply isolate');
+  _guiIsolateFolder.add(api, 'clear').name('Clear isolate');
+}
+
+/* --- carga --- */
+function setMsg(t){ document.getElementById('msg').textContent = t || ''; }
+function loadFromURL(url){
+  setMsg('Loading…'); clearModel();
+  loader.load(url, gltf=>{
+    lastGLTF = gltf;
+    place(gltf.scene); setMsg('Loaded');
+  }, xhr=>{ if(xhr.total) setMsg(`Loading ${(xhr.loaded/xhr.total*100).toFixed(0)}%`); },
+  err=>{ console.error(err); setMsg('Error loading model'); });
+}
 async function loadLocal(file){
   try{
     setMsg('Reading…'); clearModel();
     const buf = await file.arrayBuffer();
-    loader.parse(buf, '', gltf=>{ place(gltf.scene); setMsg(file.name); },
-      err=>{ console.error(err); setMsg('Error parsing GLB'); });
+    loader.parse(buf, '', gltf=>{
+      lastGLTF = gltf;
+      place(gltf.scene); setMsg(file.name);
+    }, err=>{ console.error(err); setMsg('Error parsing GLB'); });
   }catch(e){ console.error(e); setMsg('Error reading file'); }
 }
-
 document.getElementById('loadBtn').onclick=()=>{
   const u=document.getElementById('url').value.trim();
   if(u) loadFromURL(u);
@@ -323,11 +386,10 @@ const fileInput=document.getElementById('fileInput');
 document.getElementById('fileBtn').onclick=()=>{ fileInput.value=''; fileInput.click(); };
 fileInput.onchange=()=>{ const f=fileInput.files?.[0]; if(f) loadLocal(f); };
 
-/* ?model= */
 const modelURL=new URLSearchParams(location.search).get('model');
 if(modelURL){ document.getElementById('url').value=modelURL; loadFromURL(modelURL); }
 
-/* loop */
+/* --- loop --- */
 function resize(){
   const w=innerWidth,h=innerHeight;
   renderer.setSize(w,h,false);
@@ -336,8 +398,11 @@ function resize(){
 addEventListener('resize', resize);
 resize();
 
-renderer.setAnimationLoop(()=>{ controls.update(); renderer.render(scene,camera); });
+renderer.setAnimationLoop(()=>{
+  controls.update();
+  if(params.autoHideWall) updateAutoHideWall();
+  renderer.render(scene,camera);
+});
 </script>
 </body>
 </html>
-
