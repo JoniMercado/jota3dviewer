@@ -96,6 +96,20 @@ let lastHiddenWalls = new Set(); // auto-hide
 let lastGLBBytes = null;         // peso del GLB
 const MAX_DOOR_DEG = 90;
 
+// Asset detection + morph UI
+let assetRoot = null;
+let isAsset   = false;
+
+// refs UI dinámicos (se crean al detectar un asset)
+let uiMorphWrap = null;     // contenedor
+let uiMorphSelect = null;   // <select> (si >1 shape keys)
+let uiMorphSlider = null;   // <input type=range>
+
+// cache de meshes destino para aplicar morph
+let morphMeshes = [];       // array de Mesh con morphTargets dentro de 'cajon_anim'
+let morphNames  = [];       // nombres de morph targets disponibles (unión de todos los meshes)
+let activeMorph = null;     // nombre actual seleccionado
+
 /* ---------- utils ---------- */
 function setMsg(t){ document.getElementById('msg').textContent = t || ''; }
 function humanBytes(b){
@@ -114,6 +128,7 @@ function clearModel(){
     if(m) (Array.isArray(m)?m:[m]).forEach(disposeMat);
   });
   current=null; allNodes=[]; doorPanels=[]; doorVariantPairs=[]; ceilings=[]; wallRoots=[]; lastHiddenWalls.clear();
+  removeAssetUI(); // limpiar UI de morph si existía
 }
 function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geometry; t += g?.index ? g.index.count/3 : (g?.attributes?.position?.count||0)/3; }}); return Math.round(t); }
 function updateStats(sizeVec){
@@ -158,6 +173,126 @@ function doorGroupKey(name){
   const m2 = name.match(/^(.*?)(?:_(?:open|closed))?(?:leftpanel|rightpanel)\d+/i);
   if(m2) return m2[1].toLowerCase();
   return name.toLowerCase();
+}
+
+/* ---------- UI de morph (shape keys) para activos ---------- */
+function removeAssetUI(){
+  morphMeshes = [];
+  morphNames  = [];
+  activeMorph = null;
+  assetRoot   = null;
+  isAsset     = false;
+
+  if(uiMorphWrap){
+    uiMorphWrap.remove();
+    uiMorphWrap = null;
+    uiMorphSelect = null;
+    uiMorphSlider = null;
+  }
+}
+function createAssetUI(){
+  const topbar = document.getElementById('topbar');
+  uiMorphWrap = document.createElement('div');
+  uiMorphWrap.style.display = 'flex';
+  uiMorphWrap.style.alignItems = 'center';
+  uiMorphWrap.style.gap = '8px';
+
+  const tag = document.createElement('small');
+  tag.textContent = 'Asset';
+  tag.style.opacity = '0.7';
+  uiMorphWrap.appendChild(tag);
+
+  if(morphNames.length > 1){
+    uiMorphSelect = document.createElement('select');
+    morphNames.forEach(n=>{
+      const opt = document.createElement('option');
+      opt.value = n; opt.textContent = n;
+      uiMorphSelect.appendChild(opt);
+    });
+    uiMorphSelect.onchange = ()=>{
+      activeMorph = uiMorphSelect.value;
+      const m0 = morphMeshes.find(m=>m.morphTargetDictionary && activeMorph in m.morphTargetDictionary);
+      if(m0){
+        const i = m0.morphTargetDictionary[activeMorph];
+        const v = m0.morphTargetInfluences[i] ?? 0;
+        uiMorphSlider.value = String(v);
+      }
+    };
+    uiMorphWrap.appendChild(uiMorphSelect);
+  }
+
+  uiMorphSlider = document.createElement('input');
+  uiMorphSlider.type = 'range';
+  uiMorphSlider.min = '0';
+  uiMorphSlider.max = '1';
+  uiMorphSlider.step = '0.01';
+  uiMorphSlider.value = '0';
+  uiMorphSlider.style.width = '160px';
+
+  uiMorphSlider.oninput = ()=>{
+    const val = parseFloat(uiMorphSlider.value);
+    morphMeshes.forEach(m=>{
+      const dict = m.morphTargetDictionary;
+      const infl = m.morphTargetInfluences;
+      if(!dict || !infl) return;
+      if(activeMorph in dict){
+        infl[dict[activeMorph]] = val;
+        m.needsUpdate = true;
+      }
+    });
+  };
+
+  uiMorphWrap.appendChild(uiMorphSlider);
+  topbar.appendChild(uiMorphWrap);
+}
+function uniqueNamesFromMeshes(meshes){
+  const set = new Set();
+  meshes.forEach(m=>{
+    const dict = m.morphTargetDictionary;
+    if(!dict) return;
+    Object.keys(dict).forEach(k=> set.add(k));
+  });
+  return Array.from(set);
+}
+function collectMorphMeshes(rootOfCajon){
+  const out = [];
+  rootOfCajon.traverse(o=>{
+    if(o.isMesh && o.morphTargetInfluences && o.morphTargetDictionary){
+      out.push(o);
+    }
+  });
+  return out;
+}
+/**
+ * Detecta si el modelo es un "activo" (hijo que empieza por model_).
+ * Si lo es, busca 'cajon_anim' y arma UI para shape keys.
+ */
+function setupAssetControls(rootScene){
+  assetRoot = rootScene.children.find(c => /^model_/i.test(c.name));
+  isAsset = !!assetRoot;
+  if(!isAsset){ removeAssetUI(); return; }
+
+  const cajon = assetRoot.getObjectByName('cajon_anim', true);
+  if(!cajon){ removeAssetUI(); return; }
+
+  morphMeshes = collectMorphMeshes(cajon);
+  if(!morphMeshes.length){ removeAssetUI(); return; }
+
+  morphNames = uniqueNamesFromMeshes(morphMeshes);
+  if(!morphNames.length){ removeAssetUI(); return; }
+
+  activeMorph = morphNames[0];
+  createAssetUI();
+
+  const m0 = morphMeshes.find(m=>m.morphTargetDictionary && activeMorph in m.morphTargetDictionary);
+  if(m0){
+    const i = m0.morphTargetDictionary[activeMorph];
+    const v = m0.morphTargetInfluences[i] ?? 0;
+    uiMorphSlider.value = String(v);
+  }
+  if(uiMorphSelect){
+    uiMorphSelect.value = activeMorph;
+  }
 }
 
 /* ---------- puertas ---------- */
@@ -308,6 +443,9 @@ function place(root){
   reparentHardwareToDoors(allNodes, doorPanels);
 
   current = root; scene.add(root);
+
+  // detectar activo 'model_*' y preparar UI/controles de morph (cajon_anim)
+  setupAssetControls(current);
 
   // cámara + stats
   const maxDim = Math.max(size.x,size.y,size.z);
@@ -462,4 +600,3 @@ renderer.setAnimationLoop(()=>{
 </script>
 </body>
 </html>
-
