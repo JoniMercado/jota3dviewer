@@ -198,7 +198,20 @@ function reparentKeepWorld(child, newParent){
   local.decompose(child.position, child.quaternion, child.scale);
   child.updateMatrixWorld(true);
 }
-function extractIndex(name){ const m = name?.match(/(\d+)/); return m ? m[1] : null; }
+
+// CAMBIO: extracción de índice más precisa para herrajes
+function extractIndex(name){
+  if(!name) return null;
+  // Priorizar número después de "door"
+  let match = name.match(/door(\d+)/i);
+  if(match) return match[1];
+  // Si no, priorizar número después de "panel"
+  match = name.match(/panel(\d+)/i);
+  if(match) return match[1];
+  // Si no, usar el último número en el nombre
+  match = name.match(/(\d+)(?!.*\d)/);
+  return match ? match[1] : null;
+}
 
 /* ---------- puertas ---------- */
 // Rotatorias: leftpanelX / rightpanelX (sin sufijo open/closed)
