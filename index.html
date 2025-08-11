@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Room Viewer — v0.1.1</title>
+<title>Room Viewer — v0.1.2</title>
 
 <!-- Import map -->
 <script type="importmap">
@@ -31,9 +31,9 @@
   #topbar button{background:#1e68ff;border:none;color:white;padding:6px 10px;border-radius:6px;cursor:pointer}
   #topbar small{opacity:.7}
   #fileInput{display:none}
-  #logo{height:48px;margin-right:12px;border-radius:6px} /* ← cambiá height para ajustar tamaño */
+  #logo{height:48px;margin-right:12px;border-radius:6px}
 
-  /* Side panel (dims + anim) */
+  /* Side panel (anim) */
   #sidepanel{
     position:fixed;right:12px;top:12px;width:280px;max-height:calc(100% - 24px);
     display:flex;flex-direction:column;gap:8px;overflow:auto;z-index:9
@@ -59,11 +59,21 @@
   canvas{display:block;width:100%;height:100%}
   label{display:flex;align-items:center;gap:6px}
 
+  /* Medidas (overlay SVG) */
+  #measureOverlay{
+    position:fixed;inset:0;pointer-events:none;z-index:8;
+    filter: drop-shadow(0 1px 0 rgba(0,0,0,.2));
+  }
+  .m-line{stroke:#2b60ff;stroke-width:2;fill:none}
+  .m-arrow{stroke:#2b60ff;stroke-width:2;fill:none;marker-end:url(#arrow)}
+  .m-badge{fill:white;stroke:#2b60ff;stroke-width:2}
+  .m-text{font:12px/1.2 system-ui,Segoe UI,Roboto,Arial;color:#2b60ff;fill:#2b60ff;text-anchor:middle;dominant-baseline:middle}
+
   @media (max-width: 960px){ #sidepanel{width:240px} }
 </style>
 </head>
 <body>
-  <!-- Viewer v0.1.1 -->
+  <!-- Viewer v0.1.2 -->
   <div id="topbar">
     <img id="logo" src="https://jonimercado.github.io/threejs-viewer/jota%203d.jpg" alt="Logo">
     <small>GLB/GLTF URL</small>
@@ -81,6 +91,7 @@
   </div>
 
   <div id="sidepanel" style="display:none"></div>
+  <svg id="measureOverlay"></svg>
   <div id="stats"></div>
   <div id="drop">Drop a .glb / .gltf file to view</div>
   <canvas id="c"></canvas>
@@ -157,8 +168,10 @@ let lastHiddenWalls = new Set();
 
 /* Asset UI state */
 let assetRoot = null;
-let uiAssetWrap = null;
-let animGroups = []; // {name, meshes, morphNames, activeMorph, selectEl, sliderEl}
+let animGroups = [];
+
+/* Asset-only helpers */
+let blobShadow = null; // soft shadow mesh
 
 /* ---------- UI mode: clean / room / asset ---------- */
 function setUIMode(mode){
@@ -167,12 +180,15 @@ function setUIMode(mode){
   const autoH = lab('autoHideToggle');
   const ceil  = lab('hideCeilingToggle');
   const side  = document.getElementById('sidepanel');
+  const svg   = document.getElementById('measureOverlay');
 
   if(mode === 'clean'){
     if(doors) doors.style.display = 'none';
     if(autoH) autoH.style.display = 'none';
     if(ceil)  ceil.style.display  = 'none';
     side.style.display = 'none';
+    svg.style.display  = 'none';
+    removeBlobShadow();
     return;
   }
   const isAsset = (mode === 'asset');
@@ -180,6 +196,8 @@ function setUIMode(mode){
   if(autoH) autoH.style.display = isAsset ? 'none' : '';
   if(ceil)  ceil.style.display  = isAsset ? 'none' : '';
   side.style.display = '';
+  svg.style.display  = isAsset ? '' : 'none';
+  if(!isAsset) removeBlobShadow();
 }
 // arranque limpio
 setUIMode('clean');
@@ -193,6 +211,8 @@ function clearModel(){
   current.traverse?.(o=>{ if(o.geometry) o.geometry.dispose(); const m=o.material; if(m) (Array.isArray(m)?m:[m]).forEach(disposeMat); });
   current=null; allNodes=[]; doorPanels=[]; doorVariantPairs=[]; ceilings=[]; wallRoots=[]; lastHiddenWalls.clear();
   removeAssetUI();
+  clearMeasureOverlay();
+  removeBlobShadow();
 }
 function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geometry; t += g?.index ? g.index.count/3 : (g?.attributes?.position?.count||0)/3; }}); return Math.round(t); }
 function updateStats(sizeVec){
@@ -221,11 +241,10 @@ function doorGroupKey(name){
   return name.toLowerCase();
 }
 
-/* ---------- detectar modo por nombre de archivo ---------- */
+/* ---------- filename → pre-modo ---------- */
 function guessModeFromFilename(name){
   if(!name) return null;
   const lower = name.toLowerCase();
-  // *_00.* o *_0x.* (x=0-9) ⇒ room
   if(/_(00|0[0-9])\.(glb|gltf)$/.test(lower)) return 'room';
   return null;
 }
@@ -334,7 +353,6 @@ function reparentHardwareToDoors(nodes, _doorPanels){
     if(target && h.parent !== target) reparentKeepWorld(h, target);
   });
 }
-/* exclusividad open/closed */
 function enforceDoorVariantExclusivity(defaultState='closed'){
   doorVariantPairs.forEach(({open, closed})=>{
     if(open && closed){
@@ -351,7 +369,6 @@ function enforceDoorVariantExclusivity(defaultState='closed'){
 /* ---------- Asset UI (model_ + anim_) ---------- */
 function removeAssetUI(){
   animGroups = [];
-  assetRoot  = null;
   document.getElementById('sidepanel').innerHTML = '';
 }
 function collectMorphMeshes(root){
@@ -378,23 +395,6 @@ function findAnimRoots(asset){
     if(/^anim_/.test(name)) animRoots.push(o);
   });
   return animRoots.filter(o=> o !== asset);
-}
-/* Dims card */
-function makeDimsCard(target, title, sizeVec){
-  const card = document.createElement('div');
-  card.className = 'card';
-  const cm = v => Math.round(v*100);
-  card.innerHTML = `
-    <div style="font-weight:600;margin-bottom:6px">${title}</div>
-    <div style="font-size:13px;line-height:1.5">
-      W×H×D: <b>${cm(sizeVec.x)} × ${cm(sizeVec.y)} × ${cm(sizeVec.z)} cm</b>
-    </div>
-  `;
-  target.prepend(card);
-}
-function computeSizeOf(node){
-  const box = new THREE.Box3().setFromObject(node);
-  return box.getSize(new THREE.Vector3());
 }
 function buildAnimUI(){
   const side = document.getElementById('sidepanel');
@@ -476,18 +476,15 @@ function buildAnimUI(){
   side.appendChild(wrap);
 }
 function setupAssetControlsMulti(rootScene){
-  const side = document.getElementById('sidepanel');
   assetRoot = rootScene.children.find(c => /^model_/i.test(c.name));
   if(!assetRoot){
     removeAssetUI();
     setUIMode('room');
+    clearMeasureOverlay();
+    removeBlobShadow();
     return;
   }
   setUIMode('asset');
-
-  // Dims del asset
-  const size = computeSizeOf(assetRoot);
-  makeDimsCard(side, 'Dims', size);
 
   // Anim groups
   const animRoots = findAnimRoots(assetRoot);
@@ -501,6 +498,154 @@ function setupAssetControlsMulti(rootScene){
   });
   animGroups = groups;
   if(animGroups.length) buildAnimUI();
+
+  // Medidas overlay + blob shadow
+  updateMeasureOverlay(); // primer frame
+  ensureBlobShadow();
+}
+
+/* ---------- Measurement overlay (SVG) ---------- */
+const svg = document.getElementById('measureOverlay');
+const svgNS = 'http://www.w3.org/2000/svg';
+// defs (arrow marker)
+const defs = document.createElementNS(svgNS,'defs');
+const marker = document.createElementNS(svgNS,'marker');
+marker.setAttribute('id','arrow');
+marker.setAttribute('markerWidth','6');
+marker.setAttribute('markerHeight','6');
+marker.setAttribute('refX','6'); marker.setAttribute('refY','3');
+marker.setAttribute('orient','auto');
+const arrowPath = document.createElementNS(svgNS,'path');
+arrowPath.setAttribute('d','M0,0 L6,3 L0,6 Z');
+arrowPath.setAttribute('fill','#2b60ff');
+marker.appendChild(arrowPath);
+defs.appendChild(marker);
+svg.appendChild(defs);
+
+function clearMeasureOverlay(){ while(svg.childNodes.length>1) svg.removeChild(svg.lastChild); }
+
+function projectToScreen(v3){
+  const v = v3.clone().project(camera);
+  return { x:(v.x*0.5+0.5)*innerWidth, y:(-v.y*0.5+0.5)*innerHeight, z:v.z, ok:(v.z>-1 && v.z<1) };
+}
+function labelBadge(x,y,text){
+  const padX=10, padY=6, r=14;
+  const textEl = document.createElementNS(svgNS,'text');
+  textEl.setAttribute('class','m-text');
+  textEl.setAttribute('x',x); textEl.setAttribute('y',y);
+  textEl.textContent = text;
+
+  // get text bbox after attach (temp)
+  svg.appendChild(textEl);
+  const bb = textEl.getBBox();
+  svg.removeChild(textEl);
+
+  const bg = document.createElementNS(svgNS,'rect');
+  bg.setAttribute('class','m-badge');
+  bg.setAttribute('x', bb.x - padX);
+  bg.setAttribute('y', bb.y - padY);
+  bg.setAttribute('rx', 12); bg.setAttribute('ry', 12);
+  bg.setAttribute('width', bb.width + padX*2);
+  bg.setAttribute('height', bb.height + padY*2);
+
+  svg.appendChild(bg);
+  svg.appendChild(textEl);
+}
+
+function drawDim(x1,y1,x2,y2,label){
+  const line = document.createElementNS(svgNS,'line');
+  line.setAttribute('class','m-line');
+  line.setAttribute('x1',x1); line.setAttribute('y1',y1);
+  line.setAttribute('x2',x2); line.setAttribute('y2',y2);
+  svg.appendChild(line);
+
+  const a1 = document.createElementNS(svgNS,'line');
+  a1.setAttribute('class','m-arrow');
+  a1.setAttribute('x1',x1); a1.setAttribute('y1',y1);
+  a1.setAttribute('x2',x2); a1.setAttribute('y2',y2);
+  svg.appendChild(a1);
+
+  // etiqueta centrada
+  const cx = (x1+x2)/2, cy = (y1+y2)/2;
+  labelBadge(cx, cy - 14, label);
+}
+
+function updateMeasureOverlay(){
+  if(!assetRoot || svg.style.display==='none') return;
+
+  clearMeasureOverlay(); // deja los <defs>
+
+  const box = new THREE.Box3().setFromObject(assetRoot);
+  const c   = box.getCenter(new THREE.Vector3());
+  const size= box.getSize(new THREE.Vector3());
+
+  // elegir "frente" y "izquierda" según cámara
+  const frontZ = (camera.position.z >= c.z) ? box.max.z : box.min.z;
+  const leftX  = (camera.position.x >= c.x) ? box.min.x : box.max.x;
+  const rightX = (leftX===box.min.x) ? box.max.x : box.min.x;
+
+  const topY   = box.max.y, botY = box.min.y;
+
+  // puntos 3D
+  const topFrontLeft   = new THREE.Vector3(leftX, topY, frontZ);
+  const topFrontRight  = new THREE.Vector3(rightX, topY, frontZ);
+  const botFrontLeft   = new THREE.Vector3(leftX, botY, frontZ);
+  const botFrontRight  = new THREE.Vector3(rightX, botY, frontZ);
+
+  // ancho (X) en el borde superior frontal
+  const p1 = projectToScreen(topFrontLeft);
+  const p2 = projectToScreen(topFrontRight);
+
+  // alto (Y) en la esquina frontal “izquierda”
+  const p3 = projectToScreen(botFrontLeft);
+  const p4 = projectToScreen(topFrontLeft);
+
+  // profundo (Z) en el borde inferior “izquierdo” hacia atrás
+  const backZ = (frontZ===box.max.z) ? box.min.z : box.max.z;
+  const botBackLeft = new THREE.Vector3(leftX, botY, backZ);
+  const p5 = projectToScreen(botFrontLeft);
+  const p6 = projectToScreen(botBackLeft);
+
+  const cm = v => `${Math.round(v*100)} cm`;
+
+  if(p1.ok && p2.ok) drawDim(p1.x, p1.y, p2.x, p2.y, cm(size.x)); // ancho
+  if(p3.ok && p4.ok) drawDim(p3.x, p3.y, p4.x, p4.y, cm(size.y)); // alto
+  if(p5.ok && p6.ok) drawDim(p5.x, p5.y, p6.x, p6.y, cm(size.z)); // profundo
+}
+
+/* ---------- Soft blob shadow (assets) ---------- */
+function ensureBlobShadow(){
+  if(blobShadow || !assetRoot) return;
+  // textura radial suave
+  const size = 256;
+  const cnv = document.createElement('canvas'); cnv.width = cnv.height = size;
+  const ctx = cnv.getContext('2d');
+  const g = ctx.createRadialGradient(size/2,size/2, size*0.1, size/2,size/2, size*0.5);
+  g.addColorStop(0,'rgba(0,0,0,0.28)');
+  g.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.fillRect(0,0,size,size);
+  const tex = new THREE.CanvasTexture(cnv);
+
+  const box = new THREE.Box3().setFromObject(assetRoot);
+  const sz = box.getSize(new THREE.Vector3());
+  const plane = new THREE.Mesh(
+    new THREE.PlaneGeometry(1,1),
+    new THREE.MeshBasicMaterial({ map: tex, transparent:true, depthWrite:false })
+  );
+  plane.rotation.x = -Math.PI/2;
+  plane.position.set(box.getCenter(new THREE.Vector3()).x, box.min.y + 0.005, box.getCenter(new THREE.Vector3()).z);
+  // escala proporcional al footprint del asset
+  plane.scale.set(sz.x*1.3, sz.z*1.3, 1);
+  scene.add(plane);
+  blobShadow = plane;
+}
+function removeBlobShadow(){
+  if(!blobShadow) return;
+  blobShadow.material.map?.dispose?.();
+  blobShadow.material.dispose();
+  blobShadow.geometry.dispose();
+  scene.remove(blobShadow);
+  blobShadow = null;
 }
 
 /* ---------- placing ---------- */
@@ -537,8 +682,15 @@ function place(root){
   // decidir UI final: asset si tiene model_, si no room
   const hasModel = current.children.some(c => /^model_/i.test(c.name));
   setUIMode(hasModel ? 'asset' : 'room');
-  if(hasModel) setupAssetControlsMulti(current);
-  else removeAssetUI();
+  if(hasModel){
+    setupAssetControlsMulti(current);
+    ensureBlobShadow();
+    updateMeasureOverlay();
+  }else{
+    removeAssetUI();
+    clearMeasureOverlay();
+    removeBlobShadow();
+  }
 
   // cámara + stats
   const maxDim = Math.max(size.x,size.y,size.z);
@@ -598,7 +750,6 @@ function sampleFrontWalls(){
   return closest ? new Set([closest]) : new Set();
 }
 function updateAutoHide(){
-  // solo si el control está visible (modo room) y hay modelo
   const autoHToggle = document.getElementById('autoHideToggle');
   if(!autoHToggle || autoHToggle.closest('label').style.display==='none') return;
   if(!autoHToggle.checked || !current) return;
@@ -615,26 +766,20 @@ function updateAutoHide(){
 
 /* ---------- loading ---------- */
 function loadFromURL(url){
-  setUIMode('clean'); // barra limpia
-  setMsg('Loading…'); clearModel();
-  // preselección por nombre de archivo (room si *_00 o *_0x)
+  setUIMode('clean'); setMsg('Loading…'); clearModel();
   try{
     const fname = url.split('/').pop()?.split('?')[0];
     const pre = guessModeFromFilename(fname);
     if(pre) setUIMode(pre);
   }catch{}
-
   loader.load(url, g=>{ place(g.scene); setMsg('Loaded'); },
     xhr=>{ if(xhr.total) setMsg(`Loading ${(xhr.loaded/xhr.total*100).toFixed(0)}%`); },
     err=>{ console.error(err); setMsg('Error loading model'); });
 }
 function loadBlob(file){
-  setUIMode('clean'); // barra limpia
-  setMsg('Loading local file…'); clearModel();
-
+  setUIMode('clean'); setMsg('Loading local file…'); clearModel();
   const pre = guessModeFromFilename(file.name);
   if(pre) setUIMode(pre);
-
   const url = URL.createObjectURL(file);
   loader.load(url, g=>{ place(g.scene); setMsg(file.name); URL.revokeObjectURL(url); },
     undefined, e=>{ console.error(e); setMsg('Error with local file'); });
@@ -676,12 +821,13 @@ function resize(){
   renderer.setSize(w,h,false);
   camera.aspect=w/h; camera.updateProjectionMatrix();
 }
-addEventListener('resize', resize);
+addEventListener('resize', ()=>{ resize(); updateMeasureOverlay(); });
 resize();
 
 renderer.setAnimationLoop(()=>{
   controls.update();
   updateAutoHide();
+  updateMeasureOverlay(); // actualizar medidas si es asset
   renderer.render(scene,camera);
 });
 </script>
