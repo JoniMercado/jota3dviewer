@@ -8,14 +8,15 @@
   html,body{height:100%;margin:0}
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Helvetica,Arial,sans-serif;background:#0b0d10;color:#e6e6e6}
   #topbar{position:fixed;inset:12px 12px auto 12px;display:flex;gap:8px;align-items:center;background:rgba(20,22,26,.8);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:10px 12px;z-index:10}
-  #topbar input{width:360px;max-width:48vw;background:#0f1216;border:1px solid #2a2f36;color:#ddd;border-radius:10px;padding:8px 10px}
+  #topbar input{width:420px;max-width:60vw;background:#0f1216;border:1px solid #2a2f36;color:#ddd;border-radius:10px;padding:8px 10px}
   #topbar button{background:#1e68ff;border:none;color:white;padding:8px 12px;border-radius:10px;cursor:pointer}
-  #topbar small{opacity:.7}
+  #topbar small{opacity:.8}
   #fileInput{display:none}
   #stats{position:fixed;inset:auto 12px 12px 12px;background:rgba(20,22,26,.8);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:8px 12px;display:flex;gap:16px;flex-wrap:wrap}
   canvas{display:block;width:100%;height:100%}
 </style>
-<!-- Import map para resolver 'three' que usan los addons -->
+
+<!-- Import map: resuelve 'three' y 'three/addons/' que usan los loaders -->
 <script type="importmap">
 {
   "imports": {
@@ -31,7 +32,7 @@
     <input id="url" placeholder="https://example.com/model.glb" />
     <button id="loadBtn">Load</button>
     <button id="fileBtn">Open .glb</button>
-    <input type="file" id="fileInput" accept=".glb,model/gltf-binary" />
+    <input type="file" id="fileInput" accept=".glb,model/gltf-binary,model/gltf+binary,application/octet-stream" />
     <small id="msg"></small>
   </div>
   <div id="stats"></div>
@@ -44,12 +45,17 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import GUI from 'https://unpkg.com/lil-gui@0.19/dist/lil-gui.esm.js';
 
+// --- renderer / scene / camera ---
 const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 100);
@@ -62,55 +68,93 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 0.6, 0);
 controls.enableDamping = true;
 
+// --- loaders ---
 const draco = new DRACOLoader().setDecoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/draco/');
 const ktx2  = new KTX2Loader().setTranscoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/basis/').detectSupport(renderer);
 const loader = new GLTFLoader().setDRACOLoader(draco).setKTX2Loader(ktx2);
 
+// --- helpers ---
 let current;
+function disposeMat(m){ ['map','normalMap','roughnessMap','metalnessMap','occlusionMap','emissiveMap'].forEach(k=>m[k]?.dispose?.()); }
 function clearModel(){
   if(!current) return;
   scene.remove(current);
-  current.traverse?.(o=>{
-    if(o.geometry) o.geometry.dispose();
-    const m=o.material;
-    (Array.isArray(m)?m:[m]).forEach(mm=>{
-      ['map','normalMap','roughnessMap','metalnessMap','occlusionMap','emissiveMap'].forEach(k=>mm && mm[k] && mm[k].dispose());
-    });
-  });
-  current=null;
+  current.traverse?.(o=>{ if(o.geometry) o.geometry.dispose(); const m=o.material; if(m) (Array.isArray(m)?m:[m]).forEach(disposeMat); });
+  current = null;
 }
 function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geometry; if(g?.index) t+=g.index.count/3; else if(g?.attributes?.position) t+=g.attributes.position.count/3; }}); return Math.round(t); }
+
+// --- base place() ---
 function place(root){
+  // centrar y apoyar en el piso
   new THREE.Box3().setFromObject(root).getCenter(root.position).multiplyScalar(-1);
-  const box=new THREE.Box3().setFromObject(root), size=box.getSize(new THREE.Vector3());
+  const box = new THREE.Box3().setFromObject(root);
+  const size = box.getSize(new THREE.Vector3());
   root.position.y -= box.min.y;
-  current=root; scene.add(root);
+
+  current = root; scene.add(root);
+
+  // stats
   document.getElementById('stats').textContent =
     `Approx. tris: ${triCount(root).toLocaleString()} | Size: ${size.x.toFixed(2)} × ${size.y.toFixed(2)} × ${size.z.toFixed(2)} m`;
-  const maxDim=Math.max(size.x,size.y,size.z);
+
+  // frame
+  const maxDim = Math.max(size.x,size.y,size.z);
   camera.position.setScalar(maxDim*1.6).setY(maxDim*0.8);
   controls.target.copy(new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3()));
   controls.update();
 }
-function setMsg(t){ document.getElementById('msg').textContent=t||''; }
+
+// --- luces + piso (shadow catcher) ---
+const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffffff, 2.0);
+sun.position.set(3, 6, 3);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+sun.shadow.camera.near = 0.1;
+sun.shadow.camera.far = 50;
+sun.shadow.radius = 2;
+scene.add(sun);
+
+const groundMat = new THREE.ShadowMaterial({ opacity: 0.25 });
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(50,50), groundMat);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+function setShadowFlags(root, cast=true, receive=false){
+  root.traverse(o=>{ if(o.isMesh){ o.castShadow = cast; o.receiveShadow = receive; } });
+}
+
+// envolver place para ajustar piso/sombras cuando se carga modelo
+const _place = place;
+place = (root)=>{
+  _place(root);
+  const box = new THREE.Box3().setFromObject(root);
+  ground.position.y = box.min.y + 0.001;
+  setShadowFlags(root, true, false);
+};
+
+// --- UI carga ---
+function setMsg(t){ document.getElementById('msg').textContent = t || ''; }
 
 function loadFromURL(url){
   setMsg('Loading…'); clearModel();
   loader.load(url, g=>{ place(g.scene); setMsg('Loaded'); }, xhr=>{
     if(xhr.total) setMsg(`Loading ${(xhr.loaded/xhr.total*100).toFixed(0)}%`);
-  }, err=>{ console.error(err); setMsg('Error loading model'); });
+  }, err=>{ console.error(err); setMsg('Error loading model (CORS o URL inválida)'); });
 }
 
 async function loadLocal(file){
   try{
-    setMsg('Loading local file…'); clearModel();
+    setMsg('Reading…'); clearModel();
     const buf = await file.arrayBuffer();
     loader.parse(buf, '', gltf=>{ place(gltf.scene); setMsg(file.name); },
-      err=>{ console.error(err); setMsg('Error parsing local GLB'); });
+      err=>{ console.error(err); setMsg('Error parsing GLB'); });
   }catch(e){ console.error(e); setMsg('Error reading file'); }
 }
 
-// UI
 document.getElementById('loadBtn').onclick=()=>{
   const u=document.getElementById('url').value.trim();
   if(u) loadFromURL(u);
@@ -119,20 +163,86 @@ const fileInput=document.getElementById('fileInput');
 document.getElementById('fileBtn').onclick=()=>{ fileInput.value=''; fileInput.click(); };
 fileInput.onchange=()=>{ const f=fileInput.files?.[0]; if(f) loadLocal(f); };
 
-// ?model=
+// soporta ?model=URL
 const modelURL=new URLSearchParams(location.search).get('model');
 if(modelURL){ document.getElementById('url').value=modelURL; loadFromURL(modelURL); }
 
-// resize + render
+// --- Panel (lil-gui) estilo “viewer de producto” ---
+const params = {
+  exposure: renderer.toneMappingExposure,
+  toneMapping: 'ACESFilmic',
+  background: '#0b0d10',
+  floorShadow: true,
+  sunIntensity: 2.0,
+  hemiIntensity: 0.6,
+  fov: camera.fov,
+  autoRotate: false,
+  autoRotateSpeed: 1.0,
+  highQuality: true,
+  wireframe: false,
+  resetCamera(){
+    controls.reset();
+    camera.fov = 45; camera.updateProjectionMatrix();
+    renderer.setPixelRatio(params.highQuality ? Math.min(devicePixelRatio,2) : 1);
+  },
+  screenshot(){
+    const a=document.createElement('a');
+    a.href=renderer.domElement.toDataURL('image/png');
+    a.download='screenshot.png'; a.click();
+  }
+};
+const ToneMapByName = {
+  None: THREE.NoToneMapping,
+  Linear: THREE.LinearToneMapping,
+  Reinhard: THREE.ReinhardToneMapping,
+  Cineon: THREE.CineonToneMapping,
+  ACESFilmic: THREE.ACESFilmicToneMapping
+};
+const gui = new GUI({ title:'Viewer Settings', width:320 });
+const fRender = gui.addFolder('Render');
+fRender.add(params, 'exposure', 0.2, 2.5, 0.01).onChange(v=> renderer.toneMappingExposure = v);
+fRender.add(params, 'toneMapping', Object.keys(ToneMapByName)).onChange(n=> renderer.toneMapping = ToneMapByName[n]);
+fRender.addColor(params, 'background').onChange(v=> renderer.setClearColor(new THREE.Color(v)));
+fRender.add(params, 'highQuality').name('High quality (HiDPI)').onChange(v=>{
+  renderer.setPixelRatio(v ? Math.min(devicePixelRatio,2) : 1);
+});
+fRender.add(params, 'wireframe').onChange(v=>{
+  if(!current) return;
+  current.traverse(o=>{
+    if(o.isMesh && o.material){
+      (Array.isArray(o.material)?o.material:[o.material]).forEach(m=> m.wireframe = v);
+    }
+  });
+});
+fRender.add(params, 'screenshot').name('Save PNG');
+
+const fCam = gui.addFolder('Camera');
+fCam.add(params, 'fov', 20, 90, 1).onChange(v=>{ camera.fov=v; camera.updateProjectionMatrix(); });
+fCam.add(params, 'autoRotate').onChange(v=> controls.autoRotate = v);
+fCam.add(params, 'autoRotateSpeed', -5, 5, 0.1).onChange(v=> controls.autoRotateSpeed = v);
+fCam.add(params, 'resetCamera').name('Reset');
+
+const fLight = gui.addFolder('Lighting');
+fLight.add(params, 'floorShadow').name('Floor shadow').onChange(v=>{ ground.visible=v; groundMat.opacity = v ? 0.25 : 0.0; });
+fLight.add(params, 'sunIntensity', 0, 5, 0.1).onChange(v=> sun.intensity=v);
+fLight.add(params, 'hemiIntensity', 0, 2, 0.1).onChange(v=> hemi.intensity=v);
+
+gui.domElement.style.position='fixed';
+gui.domElement.style.right='12px';
+gui.domElement.style.top='12px';
+gui.domElement.style.zIndex='20';
+
+// --- resize & loop ---
 function resize(){
   const w=innerWidth,h=innerHeight;
   renderer.setSize(w,h,false);
-  if (camera) { camera.aspect=w/h; camera.updateProjectionMatrix(); }
+  camera.aspect=w/h; camera.updateProjectionMatrix();
 }
 addEventListener('resize', resize);
-resize(); // <-- ahora sí, después de crear la cámara
+resize();
 
 renderer.setAnimationLoop(()=>{ controls.update(); renderer.render(scene,camera); });
 </script>
 </body>
 </html>
+
