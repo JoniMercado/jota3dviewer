@@ -15,7 +15,7 @@
   #stats{position:fixed;inset:auto 12px 12px 12px;background:rgba(20,22,26,.8);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:8px 12px;display:flex;gap:16px;flex-wrap:wrap}
   canvas{display:block;width:100%;height:100%}
 </style>
-<!-- 🔑 Import map para resolver 'three' en los addons -->
+<!-- Import map para resolver 'three' que usan los addons -->
 <script type="importmap">
 {
   "imports": {
@@ -39,9 +39,9 @@
 
 <script type="module">
 import * as THREE from 'three';
-import { GLTFLoader }   from 'three/addons/loaders/GLTFLoader.js';
-import { DRACOLoader }  from 'three/addons/loaders/DRACOLoader.js';
-import { KTX2Loader }   from 'three/addons/loaders/KTX2Loader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
@@ -50,7 +50,6 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-resize();
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 100);
@@ -68,12 +67,14 @@ const ktx2  = new KTX2Loader().setTranscoderPath('https://unpkg.com/three@0.164/
 const loader = new GLTFLoader().setDRACOLoader(draco).setKTX2Loader(ktx2);
 
 let current;
-function clearModel(){ if(!current) return; scene.remove(current);
+function clearModel(){
+  if(!current) return;
+  scene.remove(current);
   current.traverse?.(o=>{
     if(o.geometry) o.geometry.dispose();
     const m=o.material;
     (Array.isArray(m)?m:[m]).forEach(mm=>{
-      ['map','normalMap','roughnessMap','metalnessMap','occlusionMap','emissiveMap'].forEach(k=>mm&&mm[k]&&mm[k].dispose());
+      ['map','normalMap','roughnessMap','metalnessMap','occlusionMap','emissiveMap'].forEach(k=>mm && mm[k] && mm[k].dispose());
     });
   });
   current=null;
@@ -82,11 +83,14 @@ function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geome
 function place(root){
   new THREE.Box3().setFromObject(root).getCenter(root.position).multiplyScalar(-1);
   const box=new THREE.Box3().setFromObject(root), size=box.getSize(new THREE.Vector3());
-  root.position.y -= box.min.y; current=root; scene.add(root);
-  document.getElementById('stats').textContent = `Approx. tris: ${triCount(root).toLocaleString()} | Size: ${size.x.toFixed(2)} × ${size.y.toFixed(2)} × ${size.z.toFixed(2)} m`;
+  root.position.y -= box.min.y;
+  current=root; scene.add(root);
+  document.getElementById('stats').textContent =
+    `Approx. tris: ${triCount(root).toLocaleString()} | Size: ${size.x.toFixed(2)} × ${size.y.toFixed(2)} × ${size.z.toFixed(2)} m`;
   const maxDim=Math.max(size.x,size.y,size.z);
   camera.position.setScalar(maxDim*1.6).setY(maxDim*0.8);
-  controls.target.copy(new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3())); controls.update();
+  controls.target.copy(new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3()));
+  controls.update();
 }
 function setMsg(t){ document.getElementById('msg').textContent=t||''; }
 
@@ -106,6 +110,7 @@ async function loadLocal(file){
   }catch(e){ console.error(e); setMsg('Error reading file'); }
 }
 
+// UI
 document.getElementById('loadBtn').onclick=()=>{
   const u=document.getElementById('url').value.trim();
   if(u) loadFromURL(u);
@@ -118,10 +123,16 @@ fileInput.onchange=()=>{ const f=fileInput.files?.[0]; if(f) loadLocal(f); };
 const modelURL=new URLSearchParams(location.search).get('model');
 if(modelURL){ document.getElementById('url').value=modelURL; loadFromURL(modelURL); }
 
-function resize(){ const w=innerWidth,h=innerHeight; renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+// resize + render
+function resize(){
+  const w=innerWidth,h=innerHeight;
+  renderer.setSize(w,h,false);
+  if (camera) { camera.aspect=w/h; camera.updateProjectionMatrix(); }
+}
 addEventListener('resize', resize);
+resize(); // <-- ahora sí, después de crear la cámara
+
 renderer.setAnimationLoop(()=>{ controls.update(); renderer.render(scene,camera); });
 </script>
 </body>
 </html>
-
