@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Room Viewer — v0.2.5</title>
+<title>Room Viewer — v0.2.6</title>
 
 <script type="importmap">
 {
@@ -58,21 +58,19 @@
   details.block[open]>summary{background:#f3f6ff;border-color:#ccd9ff}
   .panel{padding:8px 10px}
 
-  /* ACCIONABLES list */
+  /* Filas estilo ACCIONABLES */
   .act-row{
     display:grid; grid-template-columns: 1fr 200px;
     align-items:center; gap:10px; margin:8px 0;
     font-size:13px;
   }
   .act-row input[type="range"]{ width:200px }
-  .muted{opacity:.7;font-size:12px}
-
-  /* Select estilo “accionable” */
   .act-row select{
     width:200px; padding:6px 8px;
     border:1px solid #ccc; border-radius:6px;
     background:#f5f5f5; color:#111; font:inherit;
   }
+  .muted{opacity:.7;font-size:12px}
 
   /* Bottom stats / performance */
   #stats{
@@ -101,17 +99,32 @@
     #logo{height:36px}
     #topbar{ left:8px; top:8px; padding:8px 10px; gap:6px }
 
-    #sidepanel{ right:8px; top:8px; width:340px; }
+    /* El panel ocupa todo el ancho con márgenes laterales iguales a la top row,
+       se coloca DEBAJO de la top row y mantiene ambos lados redondeados */
+    #sidepanel{
+      position:fixed;
+      left:8px;
+      right:8px;
+      top: calc(var(--topbarH) + 8px);
+      width:auto;
+      max-height: calc(100% - var(--topbarH) - 24px);
+      border-radius:12px;
+      overflow:auto;
+    }
 
-    /* Ocultar ACCIONABLES en móvil, mantener VARIANTES */
+    /* En mobile ocultamos ACCIONABLES y mostramos VARIANTES */
     #animCard{ display:none !important; }
     #variantCard{ display:block; }
+
+    /* Asegurar que la tarjeta VARIANTES tenga radios visibles en ambos lados */
+    #variantCard.card{
+      border-radius:12px;
+    }
 
     /* Barra inferior móvil */
     #stats{ left:0; right:0; bottom:0; border-radius:0; padding:8px 10px; gap:8px; }
     #statsToggle{ display:inline-flex; align-items:center; color:#333; }
     #statsContent{ display:none; }
-
     #stats.open #statsContent{
       display:grid;
       grid-template-columns: repeat(4, auto);
@@ -121,7 +134,7 @@
     #stats .tag{ padding:3px 6px; font-size:11px; line-height:1.15 }
     #stats #stats-reset{ padding:3px 6px; font-size:11px }
 
-    /* Ajustes de filas en móvil */
+    /* Filas compactas */
     .act-row{ grid-template-columns: 1fr 140px; }
     .act-row input[type="range"]{ width:140px }
     .act-row select{ width:140px; font-size:12px; padding:5px 6px; }
@@ -143,7 +156,7 @@
     <small id="msg"></small>
   </div>
 
-  <!-- Side panel -->
+  <!-- Side panel: ACCIONABLES + VARIANTES -->
   <div id="sidepanel" style="display:none">
     <details id="animCard" class="block card" open style="display:none">
       <summary>ACCIONABLES</summary>
@@ -152,7 +165,7 @@
 
     <details id="variantCard" class="block card" open style="display:none">
       <summary>VARIANTES</summary>
-      <div class="panel" id="variantPanel"></div>
+      <div class="panel" id="variantPanel"><!-- select se inyecta aquí --></div>
     </details>
   </div>
 
@@ -255,8 +268,8 @@ scene.add(new THREE.AmbientLight(0xffffff, 0.35));
 let dirLight = null;
 
 /* ---------- loaders ---------- */
-const draco  = new DRACOLoader().setDecoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/draco/');
-const ktx2   = new KTX2Loader().setTranscoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/basis/').detectSupport(renderer);
+const draco  = new DRACOLoader().setDecoderPath('https://unpkg.com/three@0.164.1/examples/jsm/libs/draco/');
+const ktx2   = new KTX2Loader().setTranscoderPath('https://unpkg.com/three@0.164.1/examples/jsm/libs/basis/').detectSupport(renderer);
 const loader = new GLTFLoader().setDRACOLoader(draco).setKTX2Loader(ktx2);
 
 /* ---------- state ---------- */
@@ -272,7 +285,7 @@ const objectToGroup = new Map(); // for morph groups
 const objectToDoor  = new Map(); // for door groups
 let lastGLBBytes = null;
 
-/* Variants UI (en card VARIANTES) */
+/* Variants UI (in-panel) */
 let variantRowEl = null;
 let variantSelectEl = null;
 
@@ -298,6 +311,7 @@ function setUIMode(mode){
   const ceil  = lab('hideCeilingToggle');
   const side  = document.getElementById('sidepanel');
   const animCard = document.getElementById('animCard');
+  const variantCard = document.getElementById('variantCard');
 
   if(mode === 'clean'){
     if(doors) doors.style.display = 'none';
@@ -314,7 +328,7 @@ function setUIMode(mode){
 
   side.style.display = isAsset ? '' : 'none';
   animCard.style.display = isAsset ? '' : 'none';
-  document.getElementById('variantCard').style.display = isAsset ? '' : 'none';
+  variantCard.style.display = isAsset ? '' : 'none';
   if(!isAsset) removeShadowSystem();
 
   updateTopbarVar();
@@ -533,8 +547,8 @@ function buildDoorControlsFromClips(root, clips){
       const action = mixer.clipAction(clip);
       action.clampWhenFinished = true;
       action.enabled = true;
-      action.play();        // inicializa
-      action.paused = true; // control manual
+      action.play();
+      action.paused = true;
       action.time   = 0;
 
       const pathFull = track.name.split('.')[0];
@@ -643,11 +657,6 @@ function ensureShadowSystem(){
     shadowPlane.rotation.x = -Math.PI/2;
     shadowPlane.receiveShadow = true;
     shadowPlane.renderOrder = -1;
-
-    /* 👇 no intercepte raycasts */
-    shadowPlane.userData.ignorePick = true;
-    shadowPlane.raycast = () => {};
-
     scene.add(shadowPlane);
   }
 
@@ -686,7 +695,7 @@ function removeShadowSystem(){
   }
 }
 
-/* ---------- Variants (KHR_materials_variants) - en card VARIANTES ---------- */
+/* ---------- Variants (KHR_materials_variants) - en tarjeta VARIANTES ---------- */
 async function setupVariants(gltf){
   // limpiar UI previa
   if (variantRowEl?.parentNode) variantRowEl.parentNode.removeChild(variantRowEl);
@@ -695,7 +704,10 @@ async function setupVariants(gltf){
   const parser = gltf.parser;
   const json   = parser.json;
   const rootExt = json.extensions && json.extensions.KHR_materials_variants;
-  if(!rootExt || !rootExt.variants || !rootExt.variants.length) return;
+  if(!rootExt || !rootExt.variants || !rootExt.variants.length){
+    document.getElementById('variantCard').style.display = 'none';
+    return;
+  }
 
   const variantNames = rootExt.variants.map(v => v.name);
 
@@ -741,10 +753,11 @@ async function setupVariants(gltf){
 
   // asegurar panel visible
   const variantCard = document.getElementById('variantCard');
+  const variantPanel = document.getElementById('variantPanel');
   variantCard.style.display = '';
-  const panel = document.getElementById('variantPanel');
 
-  // construir fila
+  // construir fila (mismo estilo que ACCIONABLES)
+  variantPanel.innerHTML = '';
   const row   = document.createElement('div'); row.className = 'act-row';
   const label = document.createElement('div'); label.textContent = 'Material';
   const select = document.createElement('select');
@@ -758,8 +771,7 @@ async function setupVariants(gltf){
 
   row.appendChild(label);
   row.appendChild(select);
-  panel.innerHTML = '';           // una sola fila
-  panel.appendChild(row);
+  variantPanel.appendChild(row);
 
   variantRowEl   = row;
   variantSelectEl= select;
@@ -869,15 +881,11 @@ canvas.addEventListener('pointerup', (e)=>{
 
   screenToNDC(e);
   ray.setFromCamera(mouse, camera);
+  const intersects = ray.intersectObject(current ?? scene, true);
+  if(!intersects.length) return;
 
-  // Filtrar primer hit válido (ignorar cosas marcadas, p.ej. shadowPlane)
-  const hits = ray.intersectObject(current ?? scene, true);
-  const firstHit = hits.find(h => !h.object.userData?.ignorePick);
-  if(!firstHit) return;
+  const obj = intersects[0].object;
 
-  const obj = firstHit.object;
-
-  // Prioridad: puertas animadas
   const dIdx = findDoorGroupFromObject(obj);
   if(dIdx!=null){
     const g = doorGroups[dIdx];
@@ -885,7 +893,6 @@ canvas.addEventListener('pointerup', (e)=>{
     tweenDoor(g, target, 500);
     return;
   }
-  // Morphs
   if(assetRoot){
     const gi = findMorphGroupFromObject(obj);
     if(gi!=null){
@@ -921,7 +928,7 @@ function loadBlob(file){
   const url = URL.createObjectURL(file);
   loader.load(url, async (g)=>{
       place(g.scene, g.animations||[]);
-      await setupVariants(g); // variantes en card
+      await setupVariants(g);                 // variantes en tarjeta
       setMsg(file.name);
       URL.revokeObjectURL(url);
     },
@@ -962,7 +969,7 @@ function applyStatsMode(){
     statsEl.classList.remove('open');
     statsToggle.setAttribute('aria-expanded','false');
   }else{
-    statsEl.classList.add('open');
+    statsEl.classList.add('open'); // visible en desktop
     statsToggle.setAttribute('aria-expanded','true');
   }
 }
@@ -1009,3 +1016,4 @@ renderer.setAnimationLoop(()=>{
 </script>
 </body>
 </html>
+```0
