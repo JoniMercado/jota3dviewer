@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Room Viewer — v0.2.3</title>
+<title>Room Viewer — v0.2.4</title>
 
 <script type="importmap">
 {
@@ -47,20 +47,16 @@
     background:rgba(255,255,255,.9); backdrop-filter:blur(6px);
     border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:10px 12px
   }
-  /* summary con estética de la topbar */
   details.block>summary{
     list-style:none; cursor:pointer;
     display:flex; align-items:center; gap:8px;
     padding:10px 12px; border-radius:10px;
     background:rgba(255,255,255,.85); backdrop-filter:blur(6px);
     border:1px solid rgba(0,0,0,.08);
-    font-weight:800; font-size:14px; letter-spacing:.4px;
+    font-weight:800; font-size:13px; letter-spacing:.3px; /* un poco más chico */
   }
   details.block[open]>summary{background:#f3f6ff;border-color:#ccd9ff}
-  .panel{padding:8px 10px}
-
-  /* ACCIONABLES */
-  .muted{opacity:.7;font-size:12px}
+  .panel{padding:8px 10px; font-size:12px; line-height:1.25} /* tipografía más chica */
 
   /* Grid para sliders (mismos anchos) */
   .sliders-grid{
@@ -68,6 +64,7 @@
     grid-template-columns: 1fr 160px; /* nombre | slider */
     gap:8px 10px; align-items:center;
   }
+  .grid-name{ font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
   .sliders-grid input[type="range"]{ width:160px }
 
   /* Bottom stats / performance */
@@ -103,13 +100,13 @@
 
     /* Barra inferior: ancho completo; pill por defecto; contenido compacto en 2 líneas */
     #stats{ left:0; right:0; bottom:0; border-radius:0; padding:8px 10px; gap:8px }
-    #statsToggle{ display:inline-flex; align-items:center; color:#444 } /* pill en gris oscuro por default */
+    #statsToggle{ display:inline-flex; align-items:center; color:#444 }
     #statsContent{ display:none; }
 
     #stats.open #statsContent{
       display:grid;
       grid-template-columns: repeat(4, auto);
-      column-gap:6px; row-gap:2px; /* menos alto */
+      column-gap:6px; row-gap:2px;
       align-items:center;
     }
 
@@ -132,7 +129,7 @@
     <small id="msg"></small>
   </div>
 
-  <!-- Side panel: ACCIONABLES con estética de header -->
+  <!-- Side panel: ACCIONABLES -->
   <div id="sidepanel" style="display:none">
     <details id="animCard" class="block card" open style="display:none">
       <summary>ACCIONABLES</summary>
@@ -249,7 +246,7 @@ let lastHiddenWalls = new Set();
 let assetRoot = null;
 let animGroups = [];
 let shadowPlane = null;
-const objectToGroup = new Map();  // para morphs (click)
+const objectToGroup = new Map();  // morphs (click)
 const mixers = [];                // AnimationMixers
 const doorActions = new Map();    // nodeName -> { mixer, clip, action, slider }
 
@@ -512,7 +509,7 @@ function buildDoorControlsFromClips(gltf){
     action.loop = THREE.LoopOnce;
     action.enabled = true;
     action.play();
-    action.paused = true; // lo controlamos manualmente
+    action.paused = true; // scrubbing manual
 
     set.set(nodeName, { mixer, clip: subclip, action, slider: null });
   });
@@ -524,39 +521,23 @@ function buildAnimUI(doorSet){
   const panel = document.getElementById('animPanel');
   if(!panel) return;
   panel.innerHTML = '';
+
   const rows = document.createElement('div');
   rows.className = 'sliders-grid';
-
-  // Explode global (morphs):
-  if(animGroups.length){
-    const lbl = document.createElement('div'); lbl.textContent = 'EXPLOTAR';
-    const chkWrap = document.createElement('div');
-    const chk = document.createElement('input'); chk.type='checkbox';
-    chkWrap.appendChild(chk);
-    rows.appendChild(lbl); rows.appendChild(chkWrap);
-    chk.addEventListener('change', ()=>{
-      const val = chk.checked ? 1 : 0;
-      animGroups.forEach(g=>{
-        g.meshes.forEach(m=>{
-          const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return;
-          Object.values(d).forEach(idx=>{ inf[idx]=val; });
-          m.needsUpdate = true;
-        });
-        if(g.sliderEl) g.sliderEl.value = String(val);
-      });
-    });
-  }
 
   // Sliders de grupos anim_ (morphs)
   animGroups.forEach(group=>{
     const nameCell = document.createElement('div');
+    nameCell.className = 'grid-name';
     nameCell.textContent = stripAnimPrefix(group.name);
+
     const slider = document.createElement('input');
     slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.01'; slider.value='0';
     slider.oninput=()=>{ const val=parseFloat(slider.value);
       group.meshes.forEach(m=>{ const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return; if(group.activeMorph in d){ inf[d[group.activeMorph]]=val; m.needsUpdate=true; }});
     };
     group.sliderEl = slider;
+
     rows.appendChild(nameCell); rows.appendChild(slider);
   });
 
@@ -564,11 +545,14 @@ function buildAnimUI(doorSet){
   if(doorSet && doorSet.size){
     doorSet.forEach((rec, nodeName)=>{
       const nameCell = document.createElement('div');
+      nameCell.className = 'grid-name';
       nameCell.textContent = nodeName.replace(/^door_/i,'');
+
       const slider = document.createElement('input');
       slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.01'; slider.value='0';
       slider.oninput = ()=>{ const v=parseFloat(slider.value); scrubAction(rec, v); };
       rec.slider = slider;
+
       rows.appendChild(nameCell); rows.appendChild(slider);
     });
   }
@@ -580,7 +564,7 @@ function scrubAction(rec, norm01){
   if(!rec?.action || !rec.clip) return;
   const t = THREE.MathUtils.clamp(norm01,0,1) * rec.clip.duration;
   rec.action.time = t;
-  rec.mixer.update(0); // aplicar en el frame actual
+  rec.mixer.update(0);
 }
 
 /* Configura UI de asset (morphs + door clips) */
@@ -627,7 +611,7 @@ function ensureShadowSystem(){
     scene.add(dirLight);
   }
   if(!shadowPlane){
-    const mat = new THREE.ShadowMaterial({ opacity: 0.07 }); // ~30% más suave vs 0.096
+    const mat = new THREE.ShadowMaterial({ opacity: 0.07 }); /* 30% más suave vs 0.096 */
     const geo = new THREE.PlaneGeometry(1,1);
     shadowPlane = new THREE.Mesh(geo, mat);
     shadowPlane.rotation.x = -Math.PI/2;
@@ -643,7 +627,6 @@ function ensureShadowSystem(){
   shadowPlane.position.set(ctr.x, box.min.y + 0.0001, ctr.z);
   shadowPlane.scale.set(size.x*1.05, size.z*1.05, 1);
 
-  // luz desviada ~30° y desplazada 15° lateral
   const baseDX = size.x * 0.25;
   const baseDZ = size.z * 0.25;
   const ang = THREE.MathUtils.degToRad(30);
@@ -655,7 +638,7 @@ function ensureShadowSystem(){
   dirLight.target.position.set(ctr.x, ctr.y, ctr.z);
   scene.add(dirLight.target);
 
-  dirLight.shadow.radius = 5.2; // suavidad VSM algo mayor
+  dirLight.shadow.radius = 5.2;
 
   const cam = dirLight.shadow.camera;
   const r = Math.max(size.x, size.z) * 0.65;
@@ -716,7 +699,7 @@ function place(root, gltf){
   updateTopbarVar();
 }
 
-/* ---------- doors actions (rooms old toggle kept, but no UI button) ---------- */
+/* ---------- doors actions (rooms old toggle kept, sin UI) ---------- */
 function setDoorRotation(o, open){
   const amt = open ? 1 : 0;
   const rad = THREE.MathUtils.degToRad(90 * o.userData.sign * THREE.MathUtils.clamp(amt,0,1));
@@ -729,15 +712,6 @@ function toggleDoors(open){
     if(openNode)  openNode.visible  = !!open;
     if(closedNode)closedNode.visible= !open;
   });
-  if(allNodes?.length){
-    const hardware = allNodes.filter(o => /(handle|hinge|knob|hardware)/i.test(o.name));
-    hardware.forEach(h=>{
-      const idx=extractIndex(h.name), sidePref=extractSide(h.name), groupKeyPref=doorGroupKey(h.name);
-      if(idx==null) return;
-      const target = pickPreferredDoorRoot(idx, sidePref, groupKeyPref);
-      if(target && h.parent !== target) reparentKeepWorld(h, target);
-    });
-  }
 }
 
 /* ---------- auto-hide wall (rooms) ---------- */
@@ -817,7 +791,6 @@ canvas.addEventListener('pointerup', (e)=>{
   screenToNDC(e);
   ray.setFromCamera(mouse, camera);
 
-  // preferimos pickear todo el current
   const rootToPick = current || scene;
   const hits = ray.intersectObject(rootToPick, true);
   if(!hits.length) return;
@@ -829,7 +802,7 @@ canvas.addEventListener('pointerup', (e)=>{
     const cur = rec.slider ? parseFloat(rec.slider.value)||0 : (rec.action.time/rec.clip.duration);
     const target = (cur >= 0.5) ? 0 : 1;
     if(rec.slider) tweenSlider(rec.slider, target, 500);
-    else { // fallback por si no hay slider (no debería pasar)
+    else {
       const start = cur, end = target, dur = 500;
       const t0 = performance.now();
       const tick = (t)=>{
@@ -944,9 +917,7 @@ renderer.setAnimationLoop(()=>{
   statText.textContent  = `Tex: ${info.memory.textures}`;
   statRot.textContent   = `Rotate: ${controls.autoRotate ? 'On' : 'Off'}`;
 
-  // avanza mixers (por si hay algo reproduciéndose o scrubbing)
-  const dtSec = dt/1000;
-  mixers.forEach(m=> m.update(0)); // scrubbing ya fuerza update; si quisieras animación libre, usa dtSec
+  mixers.forEach(m=> m.update(0)); // scrubbing = update(0)
 
   controls.update();
   updateAutoHide();
