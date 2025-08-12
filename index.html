@@ -679,22 +679,27 @@ async function setupVariants(gltf){
   variantRow.style.display = 'none';
   variantSelect.innerHTML = '';
 
-  // Cargar el helper usando el import map (misma versión que three)
+  // 1) Importar el helper desde tu import map (misma versión de three)
   let KHRMaterialsVariants;
   try {
     ({ KHRMaterialsVariants } = await import('three/addons/utils/KHRMaterialsVariants.js'));
   } catch (e) {
-    console.warn('No pude cargar KHRMaterialsVariants desde import map', e);
-    return; // sin helper, no hay UI de variantes
+    console.warn('No pude cargar KHRMaterialsVariants', e);
+    return;
   }
 
-  const helper = new KHRMaterialsVariants(gltf);
-  const names = helper.getVariantNames();
-  if (!names || !names.length) return; // el GLB no declara variantes
+  // 2) Verificar que el GLB traiga la extensión
+  const hasExt = !!gltf?.parser?.extensions?.KHR_materials_variants;
+  if (!hasExt) {
+    console.warn('El GLB no declara KHR_materials_variants');
+    return;
+  }
 
-  variantsHelper = helper;
+  // 3) Obtener nombres de variantes (API estática en r0.164)
+  const names = KHRMaterialsVariants.getVariants(gltf);
+  if (!names || !names.length) return;
 
-  // Poblar UI
+  // 4) Poblar UI
   names.forEach((n, i)=>{
     const opt = document.createElement('option');
     opt.value = n; opt.textContent = n;
@@ -703,11 +708,12 @@ async function setupVariants(gltf){
   });
   variantRow.style.display = '';
 
-  // Aplicar la primera por defecto
-  await helper.selectVariant(gltf.scene, names[0]);
+  // 5) Aplicar la primera por defecto
+  await KHRMaterialsVariants.selectVariant(gltf.scene, gltf, names[0]);
 
+  // 6) On change
   variantSelect.onchange = async ()=>{
-    await helper.selectVariant(gltf.scene, variantSelect.value);
+    await KHRMaterialsVariants.selectVariant(gltf.scene, gltf, variantSelect.value);
   };
 }
 
