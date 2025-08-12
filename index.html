@@ -67,6 +67,13 @@
   .act-row input[type="range"]{ width:200px }
   .muted{opacity:.7;font-size:12px}
 
+  /* Select estilo “accionable” */
+  .act-row select{
+    width:200px; padding:6px 8px;
+    border:1px solid #ccc; border-radius:6px;
+    background:#f5f5f5; color:#111; font:inherit;
+  }
+
   /* Bottom stats / performance */
   #stats{
     position:fixed; left:12px; right:12px; bottom:12px;
@@ -95,7 +102,6 @@
     #topbar{ left:8px; top:8px; padding:8px 10px; gap:6px }
 
     #sidepanel{ right:8px; top:8px; width:340px; }
-    #animCard{ display:none !important; } /* ocultar ACCIONABLES en móvil */
 
     /* Barra inferior móvil */
     #stats{ left:0; right:0; bottom:0; border-radius:0; padding:8px 10px; gap:8px; }
@@ -110,6 +116,11 @@
     }
     #stats .tag{ padding:3px 6px; font-size:11px; line-height:1.15 }
     #stats #stats-reset{ padding:3px 6px; font-size:11px }
+
+    /* Ajustes de ACCIONABLES en móvil */
+    .act-row{ grid-template-columns: 1fr 140px; }
+    .act-row input[type="range"]{ width:140px }
+    .act-row select{ width:140px; font-size:12px; padding:5px 6px; }
   }
 </style>
 </head>
@@ -118,12 +129,6 @@
     <img id="logo" src="https://jonimercado.github.io/threejs-viewer/jota%203d.jpg" alt="Logo">
     <button id="fileBtn">Open .glb/.gltf</button>
     <input type="file" id="fileInput" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" />
-
-    <!-- Variants (KHR_materials_variants) -->
-    <label id="variantRow" style="display:none">
-      Variant
-      <select id="variantSelect"></select>
-    </label>
 
     <!-- Rooms controls (ocultos cuando es asset) -->
     <label style="display:none"><input type="checkbox" id="doorsToggle"> All Doors Open</label>
@@ -180,7 +185,6 @@ import { DRACOLoader }    from 'three/addons/loaders/DRACOLoader.js';
 import { KTX2Loader }     from 'three/addons/loaders/KTX2Loader.js';
 import { OrbitControls }  from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment }from 'three/addons/environments/RoomEnvironment.js';
-
 
 /* ---------- layout helper ---------- */
 const topbar = document.getElementById('topbar');
@@ -259,10 +263,9 @@ const objectToGroup = new Map(); // for morph groups
 const objectToDoor  = new Map(); // for door groups
 let lastGLBBytes = null;
 
-/* Variants helper + UI refs */
-let variantsHelper = null;
-const variantRow = document.getElementById('variantRow');
-const variantSelect = document.getElementById('variantSelect');
+/* Variants UI (in-panel) */
+let variantRowEl = null;
+let variantSelectEl = null;
 
 /* ---------- Bottom stats / performance elements ---------- */
 const statModel = document.getElementById('stat-model');
@@ -324,10 +327,9 @@ function clearModel(){
   statBytes.textContent = 'GLB: —';
   mixer = null;
 
-  // ocultar variants UI
-  variantsHelper = null;
-  variantRow.style.display = 'none';
-  variantSelect.innerHTML = '';
+  // limpiar UI de variantes
+  if (variantRowEl?.parentNode) variantRowEl.parentNode.removeChild(variantRowEl);
+  variantRowEl = null; variantSelectEl = null;
 }
 function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geometry; t += g?.index ? g.index.count/3 : (g?.attributes?.position?.count||0)/3; }}); return Math.round(t); }
 function updateStats(sizeVec){
@@ -397,11 +399,13 @@ function findDoorVariantPairs(nodes){
     if(!m) return;
     const state = m[1].toLowerCase();
     const side  = m[2].toLowerCase();
-    const idx   = m[3];
-    const group = doorGroupKey(o.name);
-    const key   = `${group}|${side}|${idx}`;
-    if(!map.has(key)) map.set(key, { open:null, closed:null, group, side, idx });
-    map.get(key)[state] = o;
+    theIdx: {
+      const idx   = m[3];
+      const group = doorGroupKey(o.name);
+      const key   = `${group}|${side}|${idx}`;
+      if(!map.has(key)) map.set(key, { open:null, closed:null, group, side, idx });
+      map.get(key)[state] = o;
+    }
   });
   return Array.from(map.values()).filter(p => p.open || p.closed);
 }
@@ -505,7 +509,7 @@ function findAnimRoots(asset){
 function stripAnimPrefix(s){ return s?.replace(/^anim_/i,'') ?? s; }
 
 /* ---------- Doors from clips ---------- */
-function removeDoorUI(){ doorGroups = []; /* UI se regenera junto a morphs */ }
+function removeDoorUI(){ doorGroups = []; }
 function buildDoorControlsFromClips(root, clips){
   if(!clips?.length) return;
   const panel = document.getElementById('animPanel');
@@ -521,11 +525,10 @@ function buildDoorControlsFromClips(root, clips){
       const action = mixer.clipAction(clip);
       action.clampWhenFinished = true;
       action.enabled = true;
-      action.play();                           // inicializa
-      action.paused = true;                    // control manual
+      action.play();
+      action.paused = true;
       action.time   = 0;
 
-      // path puede contener "A/B/C.property" -> tomamos el último segmento
       const pathFull = track.name.split('.')[0];
       const pathBase = pathFull.split('/').pop();
 
@@ -533,17 +536,15 @@ function buildDoorControlsFromClips(root, clips){
       root.traverse(o=>{ if(!targetNode && o.name === pathBase) targetNode = o; });
       if(!targetNode) targetNode = root;
 
-      // Mapear jerarquía -> índice de puerta para clicks
       targetNode.traverse(n=> objectToDoor.set(n, doorGroups.length));
 
       doorGroups.push({
-        name: stripDoorPrefix(targetNode.name), // usar nombre del objeto (sin 'door_')
+        name: stripDoorPrefix(targetNode.name),
         clip, action, node: targetNode,
         duration: clip.duration, value: 0, slider: null
       });
     });
 
-  // Render UI (puertas + morphs)
   renderActionsPanel();
 }
 function renderActionsPanel(){
@@ -551,7 +552,7 @@ function renderActionsPanel(){
   if(!panel) return;
   panel.innerHTML = '';
 
-  // Puertas (solo filas nombre + slider)
+  // Puertas
   doorGroups.forEach((g)=>{
     const row = document.createElement('div'); row.className='act-row';
     const name = document.createElement('div'); name.textContent = g.name; row.appendChild(name);
@@ -578,7 +579,6 @@ function renderActionsPanel(){
   });
   animGroups = groups;
 
-  // UI morphs
   animGroups.forEach(group=>{
     const row = document.createElement('div'); row.className='act-row';
     const label = document.createElement('div'); label.textContent = stripAnimPrefix(group.name); row.appendChild(label);
@@ -600,7 +600,7 @@ function setDoorValue(group, value){
   if(!group.action) return;
   group.action.paused = true;
   group.action.time   = group.duration * group.value;
-  group.action.syncWith(group.action); // sample inmediato
+  group.action.syncWith(group.action);
   if(group.slider) group.slider.value = String(group.value);
 }
 function tweenDoor(group, toValue, durationMs=500){
@@ -629,7 +629,7 @@ function ensureShadowSystem(){
     scene.add(dirLight);
   }
   if(!shadowPlane){
-    const mat = new THREE.ShadowMaterial({ opacity: 0.07 }); // ~30% más suave
+    const mat = new THREE.ShadowMaterial({ opacity: 0.07 });
     const geo = new THREE.PlaneGeometry(1,1);
     shadowPlane = new THREE.Mesh(geo, mat);
     shadowPlane.rotation.x = -Math.PI/2;
@@ -645,10 +645,9 @@ function ensureShadowSystem(){
   shadowPlane.position.set(ctr.x, box.min.y + 0.0001, ctr.z);
   shadowPlane.scale.set(size.x*1.05, size.z*1.05, 1);
 
-  // Dirección de luz guiada por cámara (luz acompaña rotación)
   const dir = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
-  const elev = 0.9; // cenital
-  const lateral = 0.25; // sesgo lateral
+  const elev = 0.9;
+  const lateral = 0.25;
   dirLight.position.set(ctr.x + dir.x*size.x*lateral, box.max.y + size.y*1.4*elev, ctr.z + dir.z*size.z*lateral);
   dirLight.target.position.set(ctr.x, ctr.y, ctr.z);
   scene.add(dirLight.target);
@@ -674,28 +673,27 @@ function removeShadowSystem(){
   }
 }
 
-/* ---------- Variants (KHR_materials_variants) ---------- */
+/* ---------- Variants (KHR_materials_variants) - en panel ---------- */
 async function setupVariants(gltf){
-  // Limpieza UI
-  variantsHelper = null;
-  variantRow.style.display = 'none';
-  variantSelect.innerHTML = '';
+  // limpiar UI previa
+  if (variantRowEl?.parentNode) variantRowEl.parentNode.removeChild(variantRowEl);
+  variantRowEl = null; variantSelectEl = null;
 
   const parser = gltf.parser;
   const json   = parser.json;
-  const extRoot = json.extensions && json.extensions.KHR_materials_variants;
-  if(!extRoot || !extRoot.variants || !extRoot.variants.length) return;
+  const rootExt = json.extensions && json.extensions.KHR_materials_variants;
+  if(!rootExt || !rootExt.variants || !rootExt.variants.length) return;
 
-  // Nombres de variantes
-  const variantNames = extRoot.variants.map(v => v.name);
-  // Cache de materiales cargados por índice → Promise<Material>
+  const variantNames = rootExt.variants.map(v => v.name);
+
+  // cache materiales
   const matCache = new Map();
   const getMaterialByIndex = (i) => {
     if (!matCache.has(i)) matCache.set(i, parser.getDependency('material', i));
     return matCache.get(i);
   };
 
-  // Guardar material original por si se elige una variante que no mapea ese mesh
+  // guardar material original
   gltf.scene.traverse(o => {
     if (o.isMesh && o.material && !o.userData._origMaterial) {
       o.userData._origMaterial = o.material;
@@ -703,58 +701,56 @@ async function setupVariants(gltf){
   });
 
   async function applyVariant(root, name){
-    const nameToIdx = new Map(extRoot.variants.map((v, i) => [v.name, i]));
+    const nameToIdx = new Map(rootExt.variants.map((v, i) => [v.name, i]));
     const wantedIdx = nameToIdx.get(name);
     if (wantedIdx == null) return;
 
     const pending = [];
-
     root.traverse(obj => {
       if (!obj.isMesh) return;
-
       const ext = obj.userData?.gltfExtensions?.KHR_materials_variants;
       if (!ext || !ext.mappings) {
-        // si no tiene mapping, restauramos original por si venía de otra variante
         if (obj.userData._origMaterial) obj.material = obj.userData._origMaterial;
         return;
       }
-
-      // Buscar un mapping que incluya la variante elegida
       let chosen = null;
       for (const m of ext.mappings) {
-        if (m.variants && m.variants.includes(wantedIdx)) { chosen = m; break; }
+        if (m.variants?.includes(wantedIdx)) { chosen = m; break; }
       }
-
       if (chosen && typeof chosen.material === 'number') {
-        pending.push(
-          getMaterialByIndex(chosen.material).then(mat => { obj.material = mat; })
-        );
+        pending.push(getMaterialByIndex(chosen.material).then(mat => { obj.material = mat; }));
       } else {
-        // No hay override para este mesh en esta variante → restaurar original
         if (obj.userData._origMaterial) obj.material = obj.userData._origMaterial;
       }
     });
-
     await Promise.all(pending);
   }
 
-  // Poblar UI
-  for (let i=0; i<variantNames.length; i++){
+  // asegurar panel visible
+  document.getElementById('animCard').style.display = '';
+
+  // construir fila
+  const panel = document.getElementById('animPanel');
+  const row   = document.createElement('div'); row.className = 'act-row';
+  const label = document.createElement('div'); label.textContent = 'Material';
+  const select = document.createElement('select');
+
+  variantNames.forEach((n, i)=>{
     const opt = document.createElement('option');
-    opt.value = variantNames[i];
-    opt.textContent = variantNames[i];
+    opt.value = n; opt.textContent = n;
     if (i===0) opt.selected = true;
-    variantSelect.appendChild(opt);
-  }
-  variantRow.style.display = '';
+    select.appendChild(opt);
+  });
 
-  // Aplicar primera por defecto
+  row.appendChild(label);
+  row.appendChild(select);
+  panel.appendChild(row);
+
+  variantRowEl   = row;
+  variantSelectEl= select;
+
   await applyVariant(gltf.scene, variantNames[0]);
-
-  // Cambio desde el select
-  variantSelect.onchange = async () => {
-    await applyVariant(gltf.scene, variantSelect.value);
-  };
+  select.onchange = async ()=> { await applyVariant(gltf.scene, select.value); };
 }
 
 /* ---------- placing ---------- */
@@ -863,7 +859,6 @@ canvas.addEventListener('pointerup', (e)=>{
 
   const obj = intersects[0].object;
 
-  // Prioridad: puertas animadas
   const dIdx = findDoorGroupFromObject(obj);
   if(dIdx!=null){
     const g = doorGroups[dIdx];
@@ -871,7 +866,6 @@ canvas.addEventListener('pointerup', (e)=>{
     tweenDoor(g, target, 500);
     return;
   }
-  // Morphs
   if(assetRoot){
     const gi = findMorphGroupFromObject(obj);
     if(gi!=null){
@@ -881,7 +875,6 @@ canvas.addEventListener('pointerup', (e)=>{
         const idx = probe.morphTargetDictionary[group.activeMorph];
         const cur = probe.morphTargetInfluences[idx] ?? 0;
         const target = (cur >= 0.5) ? 0 : 1;
-        // tween morph
         const start = performance.now();
         const from = cur;
         const step = (t)=>{
@@ -908,7 +901,7 @@ function loadBlob(file){
   const url = URL.createObjectURL(file);
   loader.load(url, async (g)=>{
       place(g.scene, g.animations||[]);
-      await setupVariants(g);                 // ← variantes
+      await setupVariants(g); // variantes en panel
       setMsg(file.name);
       URL.revokeObjectURL(url);
     },
@@ -949,7 +942,7 @@ function applyStatsMode(){
     statsEl.classList.remove('open');
     statsToggle.setAttribute('aria-expanded','false');
   }else{
-    statsEl.classList.add('open'); // visible en desktop
+    statsEl.classList.add('open');
     statsToggle.setAttribute('aria-expanded','true');
   }
 }
