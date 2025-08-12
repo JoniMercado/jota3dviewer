@@ -1,72 +1,979 @@
-function buildDoorControlsFromClips(gltf, scopeRoot){
-  removeDoorUI();
-  const clips = gltf.animations || [];
-  if(!clips.length) return;
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Room Viewer — v0.2.4</title>
 
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.164/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.164/examples/jsm/"
+  }
+}
+</script>
+
+<style>
+  :root{ --topbarH:72px; }
+
+  html,body{height:100%;margin:0}
+  body{
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Helvetica,Arial,sans-serif;
+    background:#c9c9c9;color:#222
+  }
+
+  /* Top bar */
+  #topbar{
+    position:fixed; left:12px; top:12px;
+    display:inline-flex; gap:8px; flex-wrap:wrap; align-items:center;
+    background:rgba(255,255,255,.85); backdrop-filter:blur(6px);
+    border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:10px 12px; z-index:10;
+    width:max-content; max-width:calc(100vw - 24px);
+  }
+  #topbar button{background:#1e68ff;border:none;color:white;padding:6px 10px;border-radius:6px;cursor:pointer}
+  #topbar small{opacity:.7}
+  #fileInput{display:none}
+  #logo{height:48px;margin-right:12px;border-radius:6px}
+  label{display:flex;align-items:center;gap:6px}
+
+  /* Right side panel (ACCIONABLES) */
+  #sidepanel{
+    position:fixed; right:12px; top:12px; /* alineado al header */
+    width:300px; max-height:calc(100% - 24px);
+    display:flex; flex-direction:column; gap:8px; overflow:auto; z-index:9
+  }
+  .card{
+    background:rgba(255,255,255,.9); backdrop-filter:blur(6px);
+    border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:10px 12px
+  }
+  /* summary con estética de la topbar */
+  details.block>summary{
+    list-style:none; cursor:pointer;
+    display:flex; align-items:center; gap:8px;
+    padding:10px 12px; border-radius:10px;
+    background:rgba(255,255,255,.85); backdrop-filter:blur(6px);
+    border:1px solid rgba(0,0,0,.08);
+    font-weight:800; font-size:14px; letter-spacing:.4px;
+  }
+  details.block[open]>summary{background:#f3f6ff;border-color:#ccd9ff}
+  .panel{padding:8px 10px}
+
+  /* ACCIONABLES (misma fila: nombre + slider) */
+  .anim-row{display:grid; grid-template-columns: 1fr 180px; gap:10px; align-items:center; margin-top:8px}
+  .anim-name{font-size:12px; opacity:.9; padding:2px 6px; background:#f2f2f2; border-radius:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .anim-slider{width:100%}
+  .muted{opacity:.7;font-size:12px}
+
+  /* Bottom stats / performance */
+  #stats{
+    position:fixed; left:12px; right:12px; bottom:12px;
+    background:rgba(255,255,255,.9); backdrop-filter:blur(6px);
+    border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:8px 12px;
+    display:flex; flex-wrap:wrap; align-items:center; gap:10px; z-index:5
+  }
+  #stats .tag{background:#f2f4f8;border:1px solid #dfe3eb;border-radius:8px;padding:4px 8px;font-size:12px}
+  #stats button{background:#eee;border:1px solid #ccc;border-radius:6px;padding:4px 8px;cursor:pointer}
+
+  /* Toggle móvil (pill “Performance”) */
+  #statsToggle{
+    display:none;
+    background:transparent; color:#444; border:1px solid #cfd6e0;
+    border-radius:999px; padding:6px 12px; font-weight:600; cursor:pointer;
+  }
+  #stats.open #statsToggle{ background:#2b7aff; color:#fff; border-color:transparent; }
+  #statsContent{ display:flex; flex-wrap:wrap; align-items:center; gap:10px }
+
+  #drop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;border:2px dashed #2a2f36;border-radius:16px;background:rgba(30,104,255,.08);color:#1e68ff;pointer-events:auto;z-index:999}
+  canvas{display:block;width:100%;height:100%}
+
+  /* ---------- Mobile tweaks ---------- */
+  @media (max-width: 640px){
+    #logo{height:36px}
+    #topbar{
+      left:0; right:0; top:0;
+      border-radius:0;
+      padding:8px 10px; gap:6px;
+      width:auto; max-width:none;
+    }
+
+    #sidepanel{ right:8px; top:8px; width:300px; }
+    #animCard{ display:none !important; } /* ocultar ACCIONABLES en móvil */
+
+    /* Barra inferior: ancho completo; pill por defecto; contenido en 2 líneas compactas */
+    #stats{
+      left:0; right:0; bottom:0;
+      border-radius:0;
+      padding:8px 10px;
+      gap:8px;
+    }
+    #statsToggle{ display:inline-flex; align-items:center; }
+    #statsContent{ display:none; }
+
+    #stats.open #statsContent{
+      display:grid;
+      grid-template-columns: repeat(4, auto);
+      column-gap:6px; row-gap:4px;
+      align-items:center;
+    }
+    #stats .tag{ padding:3px 6px; font-size:11px; line-height:1.15 }
+    #stats #stats-reset{ padding:3px 6px; font-size:11px }
+  }
+</style>
+</head>
+<body>
+  <div id="topbar">
+    <img id="logo" src="https://jonimercado.github.io/threejs-viewer/jota%203d.jpg" alt="Logo">
+    <button id="fileBtn">Open .glb/.gltf</button>
+    <input type="file" id="fileInput" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" />
+    <!-- Rooms controls (ocultos cuando es asset) -->
+    <label style="display:none"><input type="checkbox" id="doorsToggle"> All Doors Open</label>
+    <label style="display:none"><input type="checkbox" id="autoHideToggle" checked> Auto-hide front wall</label>
+    <label style="display:none"><input type="checkbox" id="hideCeilingToggle" checked> Hide ceiling</label>
+    <!-- Global -->
+    <label><input type="checkbox" id="autoRotateToggle"> Auto-rotate</label>
+    <small id="msg"></small>
+  </div>
+
+  <!-- Side panel: ACCIONABLES -->
+  <div id="sidepanel" style="display:none">
+    <details id="animCard" class="block card" open style="display:none">
+      <summary>ACCIONABLES</summary>
+      <div class="panel" id="animPanel"></div>
+    </details>
+  </div>
+
+  <!-- Bottom stats / performance -->
+  <div id="stats">
+    <button id="statsToggle" aria-expanded="false">Performance</button>
+    <div id="statsContent">
+      <span class="tag" id="stat-model">Model: —</span>
+      <span class="tag" id="stat-size">Size: —</span>
+      <span class="tag" id="stat-tris">Tris: —</span>
+      <span class="tag" id="stat-fps">FPS: —</span>
+      <span class="tag" id="stat-ms">ms: —</span>
+      <span class="tag" id="stat-calls">Calls: —</span>
+      <span class="tag" id="stat-geoms">Geoms: —</span>
+      <span class="tag" id="stat-text">Tex: —</span>
+      <span class="tag" id="stat-rot">Rotate: Off</span>
+      <button id="stats-reset" title="Reset renderer.info()">Reset</button>
+    </div>
+  </div>
+
+  <div id="drop">Drop a .glb / .gltf file to view</div>
+  <canvas id="c"></canvas>
+
+  <!-- Password Gate -->
+  <div id="gate" style="position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:2000;">
+    <div style="background:#fff;padding:20px 16px;border-radius:14px;min-width:280px;box-shadow:0 10px 30px rgba(0,0,0,.2);display:grid;gap:10px">
+      <div style="font-weight:700">Ingresar</div>
+      <input id="gateInput" type="password" placeholder="Password" style="padding:8px 10px;border:1px solid #ddd;border-radius:8px">
+      <button id="gateBtn" style="background:#1e68ff;color:#fff;border:none;border-radius:8px;padding:8px 10px;cursor:pointer">Entrar</button>
+      <small id="gateMsg" style="color:#c00;min-height:1em"></small>
+    </div>
+  </div>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader }     from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader }    from 'three/addons/loaders/DRACOLoader.js';
+import { KTX2Loader }     from 'three/addons/loaders/KTX2Loader.js';
+import { OrbitControls }  from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment }from 'three/addons/environments/RoomEnvironment.js';
+
+/* ---------- layout helper ---------- */
+const topbar = document.getElementById('topbar');
+function updateTopbarVar(){
+  const h = topbar?.offsetHeight || 72;
+  document.documentElement.style.setProperty('--topbarH', `${h}px`);
+}
+new ResizeObserver(updateTopbarVar).observe(topbar);
+addEventListener('load', updateTopbarVar);
+addEventListener('resize', updateTopbarVar);
+
+/* ---------- password gate ---------- */
+const VIEWER_PASSWORD = 'demo';
+const gate   = document.getElementById('gate');
+const gInput = document.getElementById('gateInput');
+const gBtn   = document.getElementById('gateBtn');
+const gMsg   = document.getElementById('gateMsg');
+function passOK(p){
+  const urlKey = new URLSearchParams(location.search).get('key');
+  return (p && p === VIEWER_PASSWORD) || (urlKey && urlKey === VIEWER_PASSWORD);
+}
+function unlock(){ gate.style.display = 'none'; localStorage.setItem('viewer_ok','1'); }
+(function initGate(){
+  if(localStorage.getItem('viewer_ok') === '1' || passOK(null)){ unlock(); }
+  else{
+    gBtn?.addEventListener('click', ()=>{ if(passOK(gInput.value)) unlock(); else gMsg.textContent='Password incorrecta'; });
+    gInput?.addEventListener('keydown', (e)=>{ if(e.key==='Enter') gBtn.click(); });
+  }
+})();
+
+/* ---------- renderer / scene / camera ---------- */
+const canvas   = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping      = THREE.ACESFilmicToneMapping;
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type    = THREE.VSMShadowMap;
+
+const scene  = new THREE.Scene();
+scene.background = new THREE.Color(0xc9c9c9);
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 100);
+camera.position.set(2,1.2,2);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0,0.6,0);
+controls.enableDamping = true;
+controls.autoRotate = false;
+controls.autoRotateSpeed = 0.8;
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 1.0));
+scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+
+/* Luz direccional para sombras (modo asset) */
+let dirLight = null;
+
+/* ---------- loaders ---------- */
+const draco  = new DRACOLoader().setDecoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/draco/');
+const ktx2   = new KTX2Loader().setTranscoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/basis/').detectSupport(renderer);
+const loader = new GLTFLoader().setDRACOLoader(draco).setKTX2Loader(ktx2);
+
+/* ---------- state ---------- */
+let current = null;
+let allNodes = [], doorPanels = [], doorVariantPairs = [], ceilings = [], wallRoots = [];
+let lastHiddenWalls = new Set();
+let assetRoot = null;
+let animGroups = [];          // morph groups (anim_*)
+let doorGroups = [];          // door_ sliders ({name,node,mixer,clip,action,sliderEl,current})
+let shadowPlane = null;
+const objectToGroup = new Map();   // para morph click
+const objectToDoor  = new Map();   // para door click
+
+/* ---------- Bottom stats / performance elements ---------- */
+const statModel = document.getElementById('stat-model');
+const statSize  = document.getElementById('stat-size');
+const statTris  = document.getElementById('stat-tris');
+const statFPS   = document.getElementById('stat-fps');
+const statMS    = document.getElementById('stat-ms');
+const statCalls = document.getElementById('stat-calls');
+const statGeoms = document.getElementById('stat-geoms');
+const statText  = document.getElementById('stat-text');
+const statRot   = document.getElementById('stat-rot');
+document.getElementById('stats-reset')?.addEventListener('click', ()=> renderer.info.reset());
+let fpsEMA = 0;
+
+/* ---------- UI mode ---------- */
+function setUIMode(mode){
+  const lab = id => document.getElementById(id)?.closest('label');
+  const doors = lab('doorsToggle');
+  const autoH = lab('autoHideToggle');
+  const ceil  = lab('hideCeilingToggle');
+  const side  = document.getElementById('sidepanel');
+  const animCard = document.getElementById('animCard');
+
+  if(mode === 'clean'){
+    if(doors) doors.style.display = 'none';
+    if(autoH) autoH.style.display = 'none';
+    if(ceil)  ceil.style.display  = 'none';
+    side.style.display = 'none';
+    removeShadowSystem();
+    return;
+  }
+  const isAsset = (mode === 'asset');
+  if(doors) doors.style.display = isAsset ? 'none' : '';
+  if(autoH) autoH.style.display = isAsset ? 'none' : '';
+  if(ceil)  ceil.style.display  = isAsset ? 'none' : '';
+
+  side.style.display = isAsset ? '' : 'none';
+  animCard.style.display = isAsset ? '' : 'none';
+  if(!isAsset) removeShadowSystem();
+
+  updateTopbarVar();
+}
+setUIMode('clean');
+
+/* ---------- helpers ---------- */
+function setMsg(t){ document.getElementById('msg').textContent = t || ''; }
+function disposeMat(m){ ['map','normalMap','roughnessMap','metalnessMap','occlusionMap','emissiveMap'].forEach(k=>m[k]?.dispose?.()); }
+function clearModel(){
+  if(!current) return;
+  scene.remove(current);
+  current.traverse?.(o=>{ if(o.geometry) o.geometry.dispose(); const m=o.material; if(m) (Array.isArray(m)?m:[m]).forEach(disposeMat); });
+  current=null; allNodes=[]; doorPanels=[]; doorVariantPairs=[]; ceilings=[]; wallRoots=[]; lastHiddenWalls.clear();
+  removeAssetUI(); removeDoorUI(); removeShadowSystem(); objectToGroup.clear(); objectToDoor.clear();
+  statModel.textContent = 'Model: —';
+  statSize.textContent  = 'Size: —';
+  statTris.textContent  = 'Tris: —';
+}
+function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geometry; t += g?.index ? g.index.count/3 : (g?.attributes?.position?.count||0)/3; }}); return Math.round(t); }
+function updateStats(sizeVec){
+  const tris = current ? triCount(current).toLocaleString() : '—';
+  const sz   = sizeVec ? `${sizeVec.x.toFixed(2)}×${sizeVec.y.toFixed(2)}×${sizeVec.z.toFixed(2)} m` : '—';
+  statTris.textContent = `Tris: ${tris}`;
+  statSize.textContent = `Size: ${sz}`;
+}
+function extractIndex(name){
+  if(!name) return null;
+  let match = name.match(/door(\d+)/i); if(match) return match[1];
+  match = name.match(/panel(\d+)/i);    if(match) return match[1];
+  match = name.match(/(\d+)(?!.*\d)/);  return match ? match[1] : null;
+}
+function extractSide(name){
+  if(!name) return null;
+  if(/leftpanel/i.test(name) || /_left/i.test(name)) return 'left';
+  if(/rightpanel/i.test(name) || /_right/i.test(name)) return 'right';
+  return null;
+}
+function doorGroupKey(name){
+  if(!name) return '';
+  const m = name.match(/^(.*?_door\d+)/i);
+  if(m) return m[1].toLowerCase();
+  const m2 = name.match(/^(.*?)(?:_(?:open|closed))?(?:leftpanel|rightpanel)\d+/i);
+  if(m2) return m2[1].toLowerCase();
+  return name.toLowerCase();
+}
+function guessModeFromFilename(name){
+  if(!name) return null;
+  const lower = name.toLowerCase();
+  if(/_(00|0[0-9])\.(glb|gltf)$/.test(lower)) return 'room';
+  return null;
+}
+function reparentKeepWorld(child, newParent){
+  child.updateMatrixWorld(true);
+  const childWorld = child.matrixWorld.clone();
+  newParent.updateMatrixWorld(true);
+  newParent.add(child);
+  const invParentWorld = newParent.matrixWorld.clone().invert();
+  const local = new THREE.Matrix4().multiplyMatrices(invParentWorld, childWorld);
+  local.decompose(child.position, child.quaternion, child.scale);
+  child.updateMatrixWorld(true);
+}
+
+/* ---------- puertas (rooms) ---------- */
+function findDoorPanels(nodes){
+  const panels = nodes.filter(o => /(leftpanel|rightpanel)\d+$/i.test(o.name) && !/_open|_closed/i.test(o.name));
+  return panels.map(o=>{
+    const left = /leftpanel/i.test(o.name);
+    o.userData.closedQ  = o.quaternion.clone();
+    o.userData.sign     = left ? +1 : -1;
+    o.userData.groupKey = doorGroupKey(o.name);
+    o.userData.idx      = extractIndex(o.name);
+    o.userData.side     = left ? 'left' : 'right';
+    return o;
+  });
+}
+function findDoorVariantPairs(nodes){
+  const map = new Map();
+  nodes.forEach(o=>{
+    const m = o.name.match(/_(open|closed)(leftpanel|rightpanel)(\d+)$/i);
+    if(!m) return;
+    const state = m[1].toLowerCase();
+    const side  = m[2].toLowerCase();
+    const idx   = m[3];
+    const group = doorGroupKey(o.name);
+    const key   = `${group}|${side}|${idx}`;
+    if(!map.has(key)) map.set(key, { open:null, closed:null, group, side, idx });
+    map.get(key)[state] = o;
+  });
+  return Array.from(map.values()).filter(p => p.open || p.closed);
+}
+function getDoorRootsByIndex(groupKeyPref, idx, sidePref){
+  const roots = [];
+  doorPanels.forEach(d=>{
+    const di   = d.userData.idx ?? extractIndex(d.name);
+    const side = d.userData.side ?? extractSide(d.name);
+    const gk   = d.userData.groupKey ?? doorGroupKey(d.name);
+    if(String(di) === String(idx)
+      && (!sidePref || sidePref===side)
+      && (!groupKeyPref || groupKeyPref===gk)) roots.push(d);
+  });
+  doorVariantPairs.forEach(pair=>{
+    const { open, closed, group, side, idx:pi } = pair;
+    [open, closed].filter(Boolean).forEach(n=>{
+      const di = pi ?? extractIndex(n.name);
+      const gk = group ?? doorGroupKey(n.name);
+      const sd = side  ?? extractSide(n.name);
+      if(String(di) === String(idx)
+        && (!sidePref || sidePref===sd)
+        && (!groupKeyPref || groupKeyPref===gk)) roots.push(n);
+    });
+  });
+  return roots;
+}
+function pickPreferredDoorRoot(idx, sidePref, groupKeyPref){
+  const roots = getDoorRootsByIndex(groupKeyPref, idx, sidePref);
+  if(!roots.length){
+    const anyGroup = getDoorRootsByIndex(null, idx, sidePref);
+    if(anyGroup.length) return anyGroup.find(r=>r.visible===true) || anyGroup[0];
+    const anySideAnyGroup = getDoorRootsByIndex(null, idx, null);
+    if(anySideAnyGroup.length) return anySideAnyGroup.find(r=>r.visible===true) || anySideAnyGroup[0];
+    return null;
+  }
+  return roots.find(r=>r.visible===true) || roots[0];
+}
+function reparentHardwareToDoors(nodes, _doorPanels){
+  const hardware = nodes.filter(o => /(handle|hinge|knob|hardware)/i.test(o.name));
+  hardware.forEach(h=>{
+    const idx          = extractIndex(h.name);
+    const sidePref     = extractSide(h.name);
+    const groupKeyPref = doorGroupKey(h.name);
+
+    let target = (idx!=null) ? pickPreferredDoorRoot(idx, sidePref, groupKeyPref) : null;
+
+    if(!target){
+      let candidates = _doorPanels;
+      const sameGroup = _doorPanels.filter(d => (d.userData.groupKey ?? doorGroupKey(d.name)) === groupKeyPref);
+      if(sameGroup.length) candidates = sameGroup;
+      if(sidePref){
+        const filtered = candidates.filter(d=> (d.userData.side ?? extractSide(d.name))===sidePref);
+        if(filtered.length) candidates = filtered;
+      }
+      let best=null, bestDist=Infinity;
+      const hp = new THREE.Vector3(); new THREE.Box3().setFromObject(h).getCenter(hp);
+      candidates.forEach(d=>{
+        const dp = new THREE.Vector3(); new THREE.Box3().setFromObject(d).getCenter(dp);
+        const dist = hp.distanceTo(dp);
+        if(dist<bestDist){ bestDist=dist; best=d; }
+      });
+      target = best;
+    }
+
+    if(target && h.parent !== target) reparentKeepWorld(h, target);
+  });
+}
+function enforceDoorVariantExclusivity(defaultState='closed'){
+  doorVariantPairs.forEach(({open, closed})=>{
+    if(open && closed){
+      open.visible   = (defaultState === 'open');
+      closed.visible = (defaultState === 'closed');
+    }else if(open){
+      open.visible = (defaultState === 'open');
+    }else if(closed){
+      closed.visible = (defaultState === 'closed');
+    }
+  });
+}
+
+/* ---------- Asset UI: Morph (anim_*) ---------- */
+function removeAssetUI(){
+  animGroups = [];
+  const panel = document.getElementById('animPanel');
+  if(panel) panel.innerHTML = '';
+}
+function collectMorphMeshes(root){
+  const out = [];
+  root.traverse(o=>{ if(o.isMesh && o.morphTargetInfluences && o.morphTargetDictionary){ out.push(o); }});
+  return out;
+}
+function uniqueNamesFromMeshes(meshes){
+  const set = new Set();
+  meshes.forEach(m=>{ const d=m.morphTargetDictionary; if(!d) return; Object.keys(d).forEach(k=>set.add(k)); });
+  return Array.from(set);
+}
+function findAnimRoots(asset){
+  const arr=[]; asset.traverse(o=>{ if(o!==asset && o.name && /^anim_/i.test(o.name)) arr.push(o); });
+  return arr;
+}
+function stripPrefix(s){ return s?.replace(/^anim_/i,'').replace(/^door_/i,'') ?? s; }
+
+/* ---------- Asset UI: Doors (door_* clips) ---------- */
+function removeDoorUI(){
+  doorGroups = [];
+  objectToDoor.clear();
+}
+function gatherClipsForNode(nodeName, clips){
+  // devuelve un AnimationClip con todas las tracks que afecten a nodeName
+  const tracks = [];
+  for(const c of (Array.isArray(clips)?clips:[])){
+    const tks = c.tracks?.filter(t => t.name.startsWith(nodeName + '.')) || [];
+    tracks.push(...tks);
+  }
+  if(!tracks.length) return null;
+  return new THREE.AnimationClip(nodeName, Math.max(...tracks.map(t=>t.times.at(-1) ?? c.duration || 0)), tracks);
+}
+function buildDoorControlsFromClips(rootScene, asset){
+  removeDoorUI();
   const panel = document.getElementById('animPanel');
   if(!panel) return;
 
-  // Agrupar por nodo destino (a partir del primer track)
-  const byNode = new Map();
-  clips.forEach(clip=>{
-    if(!(clip && clip.tracks && clip.tracks.length)) return;
-    const t0 = clip.tracks[0];                // p.ej. 'door_A.quaternion'
-    const m = t0.name.match(/^([^.]*)\./);
-    const nodeName = m ? m[1] : null;
-    if(!nodeName || !/^door_/i.test(nodeName)) return;
-    const node = scopeRoot.getObjectByName(nodeName);
-    if(!node) return;
-    if(!byNode.has(node)) byNode.set(node, []);
-    byNode.get(node).push(clip);
-  });
+  // puertas: nodos cuyo nombre empiece por door_
+  const nodes = [];
+  asset.traverse(o=>{ if(o.isObject3D && o.name && /^door_/i.test(o.name)) nodes.push(o); });
 
-  // OJO: Map.forEach(value, key)
-  byNode.forEach((clipsArr, node)=>{
-    if(!Array.isArray(clipsArr) || clipsArr.length===0) return;
+  if(!nodes.length) return;
 
-    // elegimos el clip más largo si hay varios
-    const clip = clipsArr.reduce((a,b)=> (a.duration>=b.duration ? a : b));
+  const allClips = (rootScene.animations && Array.isArray(rootScene.animations)) ? rootScene.animations : [];
 
-    const mixer  = new THREE.AnimationMixer(node);
-    const action = mixer.clipAction(clip);
-    action.clampWhenFinished = true;
-    action.loop = THREE.LoopOnce;
+  nodes.forEach(node=>{
+    const filtered = gatherClipsForNode(node.name, allClips);
+    if(!filtered) return;
+
+    const mixer = new THREE.AnimationMixer(asset);
+    const action = mixer.clipAction(filtered);
+    action.clampWhenFinished = false;
+    action.enabled = true;
     action.play();
-    action.paused = true;  // avanzamos manualmente con el slider
-    action.time   = 0;
+    action.setEffectiveTimeScale(0); // scrubbing manual
+    action.time = 0;
 
-    const ctrl = { name: node.name, node, mixer, clip, action, sliderEl:null, tween:null };
-    doorAnimControls.push(ctrl);
-  });
+    // UI row
+    const row=document.createElement('div'); row.className='anim-row';
+    const nm=document.createElement('div'); nm.className='anim-name'; nm.textContent=stripPrefix(node.name);
+    const slider=document.createElement('input'); slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.01'; slider.value='0'; slider.className='anim-slider';
+    row.appendChild(nm); row.appendChild(slider); panel.appendChild(row);
 
-  // UI: una fila (nombre + slider) por puerta animada
-  doorAnimControls.forEach(ctrl=>{
-    const row = document.createElement('div');
-    row.className = 'anim-row';
+    const group = { name: node.name, node, mixer, clip: filtered, action, sliderEl: slider, current: 0 };
+    doorGroups.push(group);
+    objectToDoor.set(node, group);
+    node.traverse(n => objectToDoor.set(n, group)); // mapear subárbol para el click
 
-    const nameEl = document.createElement('div');
-    nameEl.className = 'anim-name';
-    nameEl.textContent = stripDoorPrefixAndSuffix(ctrl.name);
-
-    const slider = document.createElement('input');
-    slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.01';
-    slider.value='0'; slider.className='anim-slider';
     slider.oninput = ()=>{
       const v = parseFloat(slider.value);
-      ctrl.action.time = v * ctrl.clip.duration;
-      ctrl.action.paused = true;
-      ctrl.mixer.update(0); // eval inmediata
+      group.current = v;
+      action.time = v * filtered.duration;
+      mixer.update(0);
+    };
+  });
+
+  return doorGroups.length;
+}
+
+/* ---------- Build ACCIONABLES (morph + doors juntos, sin subtítulos) ---------- */
+function buildAnimUI(){
+  const panel = document.getElementById('animPanel');
+  if(!panel) return;
+  panel.innerHTML = '';
+
+  const hasMorph = animGroups.length > 0;
+  const hasDoors = doorGroups.length > 0;
+
+  if(!hasMorph && !hasDoors){
+    document.getElementById('animCard').style.display='none';
+    return;
+  }
+  document.getElementById('animCard').style.display='';
+
+  // Toggle EXPLOTAR (morphs)
+  if(hasMorph){
+    const explodeRow = document.createElement('label');
+    explodeRow.style.cssText='display:flex;align-items:center;gap:6px;margin-bottom:6px;';
+    explodeRow.innerHTML = '<input type="checkbox" id="explodeToggle"> EXPLOTAR';
+    panel.appendChild(explodeRow);
+    const explodeToggle = explodeRow.querySelector('#explodeToggle');
+    explodeToggle.addEventListener('change', ()=>{
+      const val = explodeToggle.checked ? 1 : 0;
+      animGroups.forEach(g=>{
+        g.meshes.forEach(m=>{
+          const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return;
+          Object.values(d).forEach(idx=>{ inf[idx]=val; });
+          m.needsUpdate = true;
+        });
+        if(g.sliderEl) g.sliderEl.value = String(val);
+      });
+    });
+  }
+
+  // MORPH GROUPS (anim_*)
+  animGroups.forEach(group=>{
+    const row=document.createElement('div'); row.className='anim-row';
+    const nameBadge=document.createElement('div'); nameBadge.className='anim-name'; nameBadge.textContent=stripPrefix(group.name);
+    const slider=document.createElement('input'); slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.01'; slider.value='0'; slider.className='anim-slider';
+    row.appendChild(nameBadge); row.appendChild(slider); panel.appendChild(row);
+    group.sliderEl = slider;
+
+    // si hay varias shape keys, usamos la primera por default (ya seteado en group.activeMorph)
+    slider.oninput=()=>{
+      const val=parseFloat(slider.value);
+      group.meshes.forEach(m=>{
+        const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return;
+        if(group.activeMorph in d){ inf[d[group.activeMorph]]=val; m.needsUpdate=true; }
+      });
     };
 
-    row.appendChild(nameEl);
-    row.appendChild(slider);
-    panel.appendChild(row);
-    ctrl.sliderEl = slider;
+    const m0=group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
+    if(m0){ const i=m0.morphTargetDictionary[group.activeMorph]; const v=m0.morphTargetInfluences[i]??0; slider.value=String(v); }
   });
 
-  // Para pick por click: mapear subárboles de cada puerta
-  objectToDoorIdx.clear();
-  doorAnimControls.forEach((ctrl, idx)=>{
-    ctrl.node.traverse(n=> objectToDoorIdx.set(n, idx));
-  });
+  // DOORS (door_*) — ya agregadas como filas en buildDoorControlsFromClips()
 }
+
+/* ---------- Setup asset controls (morph + doors) ---------- */
+function setupAssetControlsMulti(rootScene){
+  assetRoot = null;
+  rootScene.traverse(o=>{ if(!assetRoot && o.name && /^model_/i.test(o.name)) assetRoot = o; });
+  if(!assetRoot){ removeAssetUI(); removeDoorUI(); setUIMode('room'); removeShadowSystem(); objectToGroup.clear(); objectToDoor.clear(); return; }
+  setUIMode('asset');
+
+  // Morph groups bajo nodos anim_*
+  const animRoots = findAnimRoots(assetRoot);
+  const groups = [];
+  objectToGroup.clear();
+
+  animRoots.forEach((ar, gi)=>{
+    const meshes = collectMorphMeshes(ar); if(!meshes.length) return;
+    const morphNames = uniqueNamesFromMeshes(meshes); if(!morphNames.length) return;
+    ar.traverse(n=>{ objectToGroup.set(n, gi); });
+    groups.push({ name: ar.name, node: ar, meshes, morphNames, activeMorph: morphNames[0], sliderEl:null, tween:null });
+  });
+  animGroups = groups;
+
+  // Doors por clips: construimos sliders por nodo door_
+  const hadDoors = buildDoorControlsFromClips(rootScene, assetRoot);
+
+  buildAnimUI();
+  ensureShadowSystem();
+}
+
+/* ---------- Sombras suaves (shadow catcher) ---------- */
+function setCastShadow(obj, val){ obj.traverse(o=>{ if(o.isMesh){ o.castShadow = !!val; }}); }
+function ensureShadowSystem(){
+  if(!assetRoot) return;
+
+  if(!dirLight){
+    dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(2048,2048);
+    dirLight.shadow.bias = -0.00015;
+    dirLight.shadow.normalBias = 0.015;
+    scene.add(dirLight);
+  }
+  if(!shadowPlane){
+    const mat = new THREE.ShadowMaterial({ opacity: 0.08 }); // ~30% más suave vs 0.12
+    const geo = new THREE.PlaneGeometry(1,1);
+    shadowPlane = new THREE.Mesh(geo, mat);
+    shadowPlane.rotation.x = -Math.PI/2;
+    shadowPlane.receiveShadow = true;
+    shadowPlane.renderOrder = -1;
+    scene.add(shadowPlane);
+  }
+
+  const box = new THREE.Box3().setFromObject(assetRoot);
+  const size= box.getSize(new THREE.Vector3());
+  const ctr = box.getCenter(new THREE.Vector3());
+
+  shadowPlane.position.set(ctr.x, box.min.y + 0.0001, ctr.z);
+  shadowPlane.scale.set(size.x*1.05, size.z*1.05, 1);
+
+  // luz: casi cenital, leve desplazamiento + giro ~30°
+  const baseDX = size.x * 0.25, baseDZ = size.z * 0.25;
+  const ang = THREE.MathUtils.degToRad(30);
+  const cos = Math.cos(ang), sin = Math.sin(ang);
+  const dx =  cos * baseDX - sin * baseDZ;
+  const dz =  sin * baseDX + cos * baseDZ;
+
+  dirLight.position.set(ctr.x + dx, box.max.y + size.y*1.4, ctr.z + dz);
+  dirLight.target.position.set(ctr.x, ctr.y, ctr.z);
+  scene.add(dirLight.target);
+
+  dirLight.shadow.radius = 5.2; // suavidad VSM (≈ +30%)
+
+  const cam = dirLight.shadow.camera;
+  const r = Math.max(size.x, size.z) * 0.65;
+  cam.left=-r; cam.right=r; cam.top=r; cam.bottom=-r; cam.near=0.1; cam.far=size.y * 4.0;
+  cam.updateProjectionMatrix();
+
+  setCastShadow(assetRoot, true);
+}
+function removeShadowSystem(){
+  if(shadowPlane){
+    shadowPlane.geometry.dispose(); shadowPlane.material.dispose();
+    scene.remove(shadowPlane); shadowPlane=null;
+  }
+  if(dirLight){
+    scene.remove(dirLight.target);
+    scene.remove(dirLight);
+    dirLight = null;
+  }
+}
+
+/* ---------- placing ---------- */
+function place(root, gltf){
+  root.traverse(o=>{
+    if(o.isMesh && /collider/i.test(o.name)) o.visible=false;
+    if(o.isMesh && /^ceiling\d*$/i.test(o.name)) o.visible=false;
+  });
+
+  new THREE.Box3().setFromObject(root).getCenter(root.position).multiplyScalar(-1);
+  const box  = new THREE.Box3().setFromObject(root);
+  const size = box.getSize(new THREE.Vector3());
+  root.position.y -= box.min.y;
+
+  allNodes = []; root.traverse(o=>{ if(o.name) allNodes.push(o); });
+  ceilings  = allNodes.filter(o => /^ceiling\d*$/i.test(o.name));
+  wallRoots = allNodes.filter(o => /^wall\d+$/i.test(o.name));
+
+  doorPanels       = findDoorPanels(allNodes);
+  doorVariantPairs = findDoorVariantPairs(allNodes);
+  enforceDoorVariantExclusivity('closed');
+  reparentHardwareToDoors(allNodes, doorPanels);
+
+  current = root; scene.add(root);
+
+  assetRoot = null;
+  current.traverse(o=>{ if(!assetRoot && o.name && /^model_/i.test(o.name)) assetRoot = o; });
+
+  setUIMode(assetRoot ? 'asset' : 'room');
+  if(assetRoot){
+    // Adjuntar animations del glTF al root para uso de puertas
+    current.animations = gltf?.animations || [];
+    setupAssetControlsMulti(current);
+    ensureShadowSystem();
+  } else {
+    removeAssetUI(); removeDoorUI(); removeShadowSystem(); objectToGroup.clear(); objectToDoor.clear();
+  }
+
+  const maxDim = Math.max(size.x,size.y,size.z);
+  camera.position.setScalar(maxDim*1.6).setY(maxDim*0.8);
+  controls.target.copy(new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3()));
+  controls.update();
+
+  statModel.textContent = `Model: ${root.name || '(scene)'}`;
+  updateStats(size);
+  updateTopbarVar();
+}
+
+/* ---------- doors actions (rooms) ---------- */
+function setDoorRotation(o, open){
+  const amt = open ? 1 : 0;
+  const rad = THREE.MathUtils.degToRad(90 * o.userData.sign * THREE.MathUtils.clamp(amt,0,1));
+  o.quaternion.copy(o.userData.closedQ); o.rotateY(rad);
+}
+function toggleDoors(open){
+  doorPanels.forEach(o=> setDoorRotation(o, open));
+  doorVariantPairs.forEach(pair=>{
+    const {open:openNode, closed:closedNode} = pair;
+    if(openNode)  openNode.visible  = !!open;
+    if(closedNode)closedNode.visible= !open;
+  });
+  if(allNodes?.length){
+    const hardware = allNodes.filter(o => /(handle|hinge|knob|hardware)/i.test(o.name));
+    hardware.forEach(h=>{
+      const idx=extractIndex(h.name), sidePref=extractSide(h.name), groupKeyPref=doorGroupKey(h.name);
+      if(idx==null) return;
+      const target = pickPreferredDoorRoot(idx, sidePref, groupKeyPref);
+      if(target && h.parent !== target) reparentKeepWorld(h, target);
+    });
+  }
+}
+
+/* ---------- auto-hide wall (rooms) ---------- */
+const ray = new THREE.Raycaster();
+function wallRootOf(obj){ let p=obj; while(p){ if(/^wall\d+$/i.test(p.name)) return p; p=p.parent; } return null; }
+function sampleFrontWalls(){
+  if(!wallRoots?.length) return new Set();
+  let closest=null, closestDist=Infinity;
+  const distToTarget = camera.position.distanceTo(controls.target);
+  const samples=[{x:0,y:0},{x:0.14,y:0},{x:-0.14,y:0},{x:0,y:0.14},{x:0,y:-0.14}];
+  for(const ndc of samples){
+    ray.setFromCamera(ndc, camera);
+    const hits = ray.intersectObjects(wallRoots, true);
+    if(hits.length){
+      const h = hits[0];
+      if(h.distance < distToTarget*0.995 && h.distance < closestDist){
+        closest = wallRootOf(h.object); closestDist = h.distance;
+      }
+    }
+  }
+  return closest ? new Set([closest]) : new Set();
+}
+function updateAutoHide(){
+  const autoHToggle=document.getElementById('autoHideToggle');
+  if(!autoHToggle || autoHToggle.closest('label').style.display==='none') return;
+  if(!autoHToggle.checked || !current) return;
+  const front = sampleFrontWalls();
+  for(const wr of Array.from(lastHiddenWalls)){ if(!front.has(wr)){ wr.visible=true; lastHiddenWalls.delete(wr);} }
+  for(const wr of front){ if(!lastHiddenWalls.has(wr)){ wr.visible=false; lastHiddenWalls.add(wr);} }
+}
+
+/* ---------- Click handlers (morph & doors) ---------- */
+const mouse = new THREE.Vector2();
+let downPos = null;
+function screenToNDC(e){
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+}
+function findMorphGroupFromObject(obj){
+  let p=obj;
+  while(p){
+    if(objectToGroup.has(p)) return objectToGroup.get(p);
+    p=p.parent;
+  }
+  return null;
+}
+function findDoorGroupFromObject(obj){
+  let p=obj;
+  while(p){
+    if(objectToDoor.has(p)) return objectToDoor.get(p);
+    p=p.parent;
+  }
+  return null;
+}
+function tweenDoor(group, toValue, duration=500){
+  if(!group) return;
+  const from = group.current ?? 0;
+  const start = performance.now();
+  const step = (t)=>{
+    const k = Math.min(1, (t-start)/duration);
+    const v = from + (toValue - from)*k;
+    group.current = v;
+    group.action.time = v * group.clip.duration;
+    group.mixer.update(0);
+    if(group.sliderEl) group.sliderEl.value = String(v);
+    if(k<1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+function tweenMorph(group, toValue, duration=500){
+  if(!group) return;
+  const m0 = group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
+  if(!m0) return;
+  const i = m0.morphTargetDictionary[group.activeMorph];
+  const from = m0.morphTargetInfluences[i] ?? 0;
+  const start = performance.now();
+  const step = (t)=>{
+    const k = Math.min(1, (t-start)/duration);
+    const v = from + (toValue - from)*k;
+    group.meshes.forEach(m=>{
+      const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return;
+      if(group.activeMorph in d){ inf[d[group.activeMorph]] = v; m.needsUpdate = true; }
+    });
+    if(group.sliderEl) group.sliderEl.value = String(v);
+    if(k<1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+canvas.addEventListener('pointerdown', (e)=>{ downPos = {x:e.clientX,y:e.clientY}; });
+canvas.addEventListener('pointerup', (e)=>{
+  if(controls.dragging) return;
+  if(downPos && (Math.hypot(e.clientX-downPos.x, e.clientY-downPos.y) > 3)) return;
+
+  const rect = renderer.domElement.getBoundingClientRect();
+  if(e.clientY < rect.top + (topbar?.offsetHeight||0)) return;
+
+  screenToNDC(e);
+  ray.setFromCamera(mouse, camera);
+
+  // Prioridad: puertas -> morphs
+  if(assetRoot){
+    const iDoors = ray.intersectObject(assetRoot, true).filter(h => !!findDoorGroupFromObject(h.object));
+    if(iDoors.length){
+      const g = findDoorGroupFromObject(iDoors[0].object);
+      const target = (g.current >= 0.5) ? 0 : 1;
+      tweenDoor(g, target, 500);
+      return;
+    }
+    const iMorph = ray.intersectObject(assetRoot, true).filter(h => findMorphGroupFromObject(h.object)!=null);
+    if(iMorph.length){
+      const gi = findMorphGroupFromObject(iMorph[0].object);
+      const g = animGroups[gi];
+      const m0 = g.meshes.find(m=>m.morphTargetDictionary && g.activeMorph in m.morphTargetDictionary);
+      if(!m0) return;
+      const idx = m0.morphTargetDictionary[g.activeMorph];
+      const cur = m0.morphTargetInfluences[idx] ?? 0;
+      const target = (cur >= 0.5) ? 0 : 1;
+      tweenMorph(g, target, 500);
+    }
+  }
+});
+
+/* ---------- loading ---------- */
+function loadBlob(file){
+  setUIMode('clean'); setMsg('Loading local file…'); clearModel();
+  const pre = guessModeFromFilename(file.name); if(pre) setUIMode(pre);
+  const url = URL.createObjectURL(file);
+  loader.load(url, g=>{ place(g.scene, g); setMsg(file.name); URL.revokeObjectURL(url); },
+    undefined, e=>{ console.error(e); setMsg('Error with local file'); });
+}
+
+/* ---------- UI ---------- */
+const fileInput = document.getElementById('fileInput');
+document.getElementById('fileBtn').onclick = ()=>{ fileInput.value=''; fileInput.click(); };
+fileInput.onchange = ()=>{ const f=fileInput.files?.[0]; if(f) loadBlob(f); };
+document.getElementById('doorsToggle').onchange = e=> toggleDoors(e.target.checked);
+document.getElementById('hideCeilingToggle').onchange = e=>{ ceilings.forEach(c=> c.visible = !e.target.checked); };
+document.getElementById('autoRotateToggle').onchange = e=>{ controls.autoRotate = e.target.checked; statRot.textContent = `Rotate: ${e.target.checked?'On':'Off'}`; };
+
+/* ---------- drag & drop ---------- */
+const drop=document.getElementById('drop');
+['dragenter','dragover','dragleave','drop'].forEach(ev=>{
+  window.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); }, false);
+});
+window.addEventListener('dragenter', ()=> drop.style.display='flex');
+window.addEventListener('dragover',  ()=> drop.style.display='flex');
+window.addEventListener('dragleave', e=>{
+  if(e.clientX<=0||e.clientY<=0||e.clientX>=innerWidth||e.clientY>=innerHeight){ drop.style.display='none'; }
+});
+function handleDrop(e){
+  e.preventDefault(); e.stopPropagation();
+  drop.style.display='none';
+  const f=e.dataTransfer?.files?.[0]; if(f) loadBlob(f);
+}
+drop.addEventListener('drop', handleDrop);
+
+/* ---------- stats toggle (mobile) ---------- */
+const statsEl = document.getElementById('stats');
+const statsToggle = document.getElementById('statsToggle');
+function isMobile(){ return window.matchMedia('(max-width: 640px)').matches; }
+function applyStatsMode(){
+  if(isMobile()){
+    statsEl.classList.remove('open');
+    statsToggle.setAttribute('aria-expanded','false');
+  }else{
+    statsEl.classList.add('open'); // visible en desktop
+    statsToggle.setAttribute('aria-expanded','true');
+  }
+}
+statsToggle.addEventListener('click', ()=>{
+  if(!isMobile()) return;
+  const open = statsEl.classList.toggle('open');
+  statsToggle.setAttribute('aria-expanded', open ? 'true':'false');
+});
+addEventListener('resize', applyStatsMode);
+applyStatsMode();
+
+/* ---------- resize & loop ---------- */
+function resize(){
+  const w=innerWidth,h=innerHeight;
+  renderer.setSize(w,h,false);
+  camera.aspect=w/h; camera.updateProjectionMatrix();
+  updateTopbarVar();
+}
+addEventListener('resize', ()=>{ resize(); ensureShadowSystem(); });
+resize();
+
+/* ---------- perf update & render loop ---------- */
+let lastT = performance.now();
+renderer.setAnimationLoop(()=>{
+  const now = performance.now();
+  const dt = now - lastT; lastT = now;
+  const fpsInst = 1000/dt;
+  fpsEMA = fpsEMA ? (fpsEMA*0.9 + fpsInst*0.1) : fpsInst;
+
+  const info = renderer.info;
+  statFPS.textContent   = `FPS: ${fpsEMA.toFixed(0)}`;
+  statMS.textContent    = `ms: ${dt.toFixed(1)}`;
+  statCalls.textContent = `Calls: ${info.render.calls}`;
+  statGeoms.textContent = `Geoms: ${info.memory.geometries}`;
+  statText.textContent  = `Tex: ${info.memory.textures}`;
+  statRot.textContent   = `Rotate: ${controls.autoRotate ? 'On' : 'Off'}`;
+
+  // actualizar mixers de puertas (no avanzan tiempo porque usamos scrubbing, pero por si hubiera constraints)
+  doorGroups.forEach(g => g.mixer.update(0));
+
+  controls.update();
+  updateAutoHide();
+  ensureShadowSystem();
+  renderer.render(scene,camera);
+});
+</script>
+</body>
+</html>
