@@ -17,8 +17,6 @@
 <style>
   :root{
     --topbarH:72px;         /* se actualiza por JS */
-    --topbarW:320px;        /* se actualiza por JS (móvil) */
-    --topbarX:8px;          /* se actualiza por JS (móvil) */
     --stackGap:8px;         /* separación vertical estándar en móvil */
     --padCard:10px 12px;    /* padding por defecto de cards */
     --radiusCard:12px;
@@ -36,7 +34,7 @@
     position:fixed; left:12px; top:12px;
     display:inline-flex; gap:8px; flex-wrap:wrap; align-items:center;
     background:rgba(255,255,255,.85); backdrop-filter:blur(6px);
-    border:1px solid rgba(0,0,0,.08); border-radius:var(--radiusCard); padding:var(--padCard); z-index:10;
+    border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:10px 12px; z-index:10;
     width:max-content; max-width:calc(100vw - 24px);  /* escritorio */
   }
   #topbar button{background:#1e68ff;border:none;color:white;padding:6px 10px;border-radius:6px;cursor:pointer}
@@ -53,7 +51,7 @@
   }
   .card{
     background:rgba(255,255,255,.9); backdrop-filter:blur(6px);
-    border:1px solid rgba(0,0,0,.08); border-radius:var(--radiusCard); padding:var(--padCard)
+    border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:10px 12px
   }
   details.block>summary{
     list-style:none; cursor:pointer;
@@ -80,7 +78,7 @@
     background:#f5f5f5; color:#111; font:inherit;
   }
 
-  /* VARIANTES: card reutiliza estilos .card y details.block */
+  /* VARIANTES */
   #variantsCard{ z-index:9 }
   #variantsPanel .act-row{ margin-top:6px }
 
@@ -88,7 +86,7 @@
   #stats{
     position:fixed; left:12px; right:12px; bottom:12px;
     background:rgba(255,255,255,.9); backdrop-filter:blur(6px);
-    border:1px solid rgba(0,0,0,.08); border-radius:var(--radiusCard); padding:8px 12px;
+    border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:8px 12px;
     display:flex; flex-wrap:wrap; align-items:center; gap:10px; z-index:5
   }
   #stats .tag{background:#f2f4f8;border:1px solid #dfe3eb;border-radius:8px;padding:4px 8px;font-size:12px}
@@ -105,28 +103,27 @@
     }
 
     #logo{height:36px}
-    /* Topbar: no ocupar todo el ancho, bordes redondeados en ambos lados,
-       mismo margen lateral que vertical (edgeGap) */
+
+    /* Topbar: márgenes simétricos y auto-ajuste de ancho */
     #topbar{
-      left:var(--topbarX); top:var(--stackGap);
-      max-width:none;
-      width:var(--topbarW);
-      border-radius:var(--radiusCard);
+      left:var(--edgeGap); right:var(--edgeGap); top:var(--stackGap);
+      width:auto; max-width:unset;
+      border-radius:12px;
+      display:flex; flex-wrap:wrap; gap:8px;
     }
 
     /* Ocultar ACCIONABLES en móvil */
-    #sidepanel{ right:var(--edgeGap); top:var(--edgeGap); width:340px; }
     #animCard{ display:none !important; }
 
-    /* VARIANTES en móvil:
-       fija debajo del topbar, misma izquierda y mismo ancho,
-       separación vertical igual a --stackGap */
+    /* VARIANTES en móvil: debajo del topbar, mismo margen lateral,
+       y separación vertical igual al margen superior */
     #variantsCard.mobile{
       position:fixed;
-      left:var(--topbarX);
-      top:calc(var(--stackGap) + var(--topbarH) + var(--stackGap)); /* gap = margen superior */
-      width:var(--topbarW);
-      padding:8px 10px; /* más compacto en móvil */
+      left:var(--edgeGap); right:var(--edgeGap);
+      top:calc(var(--stackGap) + var(--topbarH) + var(--stackGap));
+      width:auto; max-width:unset;
+      border-radius:12px;
+      padding:8px 10px; /* compacto */
     }
     #variantsCard.mobile details.block>summary{
       padding:8px 10px; font-size:13px;
@@ -163,14 +160,13 @@
     <small id="msg"></small>
   </div>
 
-  <!-- Side panel: ACCIONABLES -->
+  <!-- Side panel: ACCIONABLES + VARIANTES (desktop) -->
   <div id="sidepanel" style="display:none">
     <details id="animCard" class="block card" open style="display:none">
       <summary>ACCIONABLES</summary>
       <div class="panel" id="animPanel"></div>
     </details>
 
-    <!-- VARIANTES (en escritorio vive aquí; en móvil se reposiciona) -->
     <details id="variantsCard" class="block card" open style="display:none">
       <summary>VARIANTES</summary>
       <div class="panel" id="variantsPanel">
@@ -226,11 +222,7 @@ const topbar = document.getElementById('topbar');
 const variantsCard = document.getElementById('variantsCard');
 function updateTopbarVar(){
   const h = topbar?.offsetHeight || 72;
-  const w = topbar?.offsetWidth  || 320;
-  const x = topbar?.offsetLeft   || 8;
   document.documentElement.style.setProperty('--topbarH', `${h}px`);
-  document.documentElement.style.setProperty('--topbarW', `${w}px`);
-  document.documentElement.style.setProperty('--topbarX', `${x}px`);
 }
 new ResizeObserver(updateTopbarVar).observe(topbar);
 addEventListener('load', updateTopbarVar);
@@ -241,7 +233,7 @@ const mql = window.matchMedia('(max-width: 640px)');
 function placeVariantsForViewport(){
   if(!variantsCard) return;
   if(mql.matches){
-    // móvil: debajo del topbar, mismo ancho y misma izquierda
+    // móvil: debajo del topbar, márgenes simétricos
     variantsCard.classList.add('mobile');
     variantsCard.style.display = variantsCard.dataset.hasVariants === '1' ? '' : 'none';
     document.body.appendChild(variantsCard);
