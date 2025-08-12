@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Room Viewer — v0.1.7</title>
+<title>Room Viewer — v0.1.8</title>
 
 <script type="importmap">
 {
@@ -161,7 +161,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping      = THREE.ACESFilmicToneMapping;
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type    = THREE.VSMShadowMap;   // VSM para bordes suaves
+renderer.shadowMap.type    = THREE.VSMShadowMap;
 
 const scene  = new THREE.Scene();
 scene.background = new THREE.Color(0xc9c9c9);
@@ -194,8 +194,11 @@ let current = null;
 let allNodes = [], doorPanels = [], doorVariantPairs = [], ceilings = [], wallRoots = [];
 let lastHiddenWalls = new Set();
 let assetRoot = null;            // nodo model_
-let animGroups = [];             // [{name, meshes, morphNames, activeMorph, ...}]
+let animGroups = [];             // [{name, node, meshes, morphNames, activeMorph, sliderEl, selectEl}]
 let shadowPlane = null;
+
+/* mapa rápido: id de grupo por objeto (para picking) */
+const objectToGroup = new Map();
 
 /* ---------- Performance panel state ---------- */
 const elFPS   = document.getElementById('perf-fps');
@@ -245,7 +248,7 @@ function clearModel(){
   scene.remove(current);
   current.traverse?.(o=>{ if(o.geometry) o.geometry.dispose(); const m=o.material; if(m) (Array.isArray(m)?m:[m]).forEach(disposeMat); });
   current=null; allNodes=[]; doorPanels=[]; doorVariantPairs=[]; ceilings=[]; wallRoots=[]; lastHiddenWalls.clear();
-  removeAssetUI(); removeShadowSystem();
+  removeAssetUI(); removeShadowSystem(); objectToGroup.clear();
 }
 function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geometry; t += g?.index ? g.index.count/3 : (g?.attributes?.position?.count||0)/3; }}); return Math.round(t); }
 function updateStats(sizeVec){
@@ -478,16 +481,20 @@ function buildAnimUI(){
 function setupAssetControlsMulti(rootScene){
   assetRoot = null;
   rootScene.traverse(o=>{ if(!assetRoot && o.name && /^model_/i.test(o.name)) assetRoot = o; });
-  if(!assetRoot){ removeAssetUI(); setUIMode('room'); removeShadowSystem(); return; }
+  if(!assetRoot){ removeAssetUI(); setUIMode('room'); removeShadowSystem(); objectToGroup.clear(); return; }
 
   setUIMode('asset');
 
   const animRoots = findAnimRoots(assetRoot);
   const groups = [];
-  animRoots.forEach(ar=>{
+  objectToGroup.clear();
+
+  animRoots.forEach((ar, gi)=>{
     const meshes = collectMorphMeshes(ar); if(!meshes.length) return;
     const morphNames = uniqueNamesFromMeshes(meshes); if(!morphNames.length) return;
-    groups.push({ name: ar.name, meshes, morphNames, activeMorph: morphNames[0], selectEl:null, sliderEl:null });
+    // mapear todo el subtree al grupo gi para picking
+    ar.traverse(n=>{ objectToGroup.set(n, gi); });
+    groups.push({ name: ar.name, node: ar, meshes, morphNames, activeMorph: morphNames[0], selectEl:null, sliderEl:null, tween:null });
   });
   animGroups = groups;
   buildAnimUI();
@@ -525,7 +532,7 @@ function ensureShadowSystem(){
   shadowPlane.position.set(ctr.x, box.min.y + 0.0001, ctr.z);
   shadowPlane.scale.set(size.x*1.05, size.z*1.05, 1);
 
-  // inclinación + giro 30° en el plano XZ (estirar sombra ~15° extra hacia un costado)
+  // inclinación + giro 30°
   const baseDX = size.x * 0.25;
   const baseDZ = size.z * 0.25;
   const ang = THREE.MathUtils.degToRad(30);
@@ -537,10 +544,8 @@ function ensureShadowSystem(){
   dirLight.target.position.set(ctr.x, ctr.y, ctr.z);
   scene.add(dirLight.target);
 
-  // VSM: suavidad
   dirLight.shadow.radius = 4.0;
 
-  // Frustum centrado al asset
   const cam = dirLight.shadow.camera;
   const r = Math.max(size.x, size.z) * 0.65;
   cam.left=-r; cam.right=r; cam.top=r; cam.bottom=-r; cam.near=0.1; cam.far=size.y * 4.0;
@@ -589,7 +594,7 @@ function place(root){
 
   setUIMode(assetRoot ? 'asset' : 'room');
   if(assetRoot){ setupAssetControlsMulti(current); ensureShadowSystem(); }
-  else{ removeAssetUI(); removeShadowSystem(); }
+  else{ removeAssetUI(); removeShadowSystem(); objectToGroup.clear(); }
 
   const maxDim = Math.max(size.x,size.y,size.z);
   camera.position.setScalar(maxDim*1.6).setY(maxDim*0.8);
@@ -651,6 +656,69 @@ function updateAutoHide(){
   for(const wr of Array.from(lastHiddenWalls)){ if(!front.has(wr)){ wr.visible=true; lastHiddenWalls.delete(wr);} }
   for(const wr of front){ if(!lastHiddenWalls.has(wr)){ wr.visible=false; lastHiddenWalls.add(wr);} }
 }
+
+/* ---------- Click-to-toggle morph (0.5s tween) ---------- */
+const mouse = new THREE.Vector2();
+let downPos = null;
+function screenToNDC(e){
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+}
+function findGroupFromObject(obj){
+  let p=obj;
+  while(p){
+    if(objectToGroup.has(p)) return objectToGroup.get(p);
+    p=p.parent;
+  }
+  return null;
+}
+function tweenGroupMorph(group, toValue, duration=500){
+  if(!group) return;
+  const m0 = group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
+  if(!m0) return;
+  const i = m0.morphTargetDictionary[group.activeMorph];
+  const from = m0.morphTargetInfluences[i] ?? 0;
+
+  const start = performance.now();
+  if(group.tween) cancelAnimationFrame(group.tween.raf);
+  group.tween = { raf: 0 };
+
+  const step = (t)=>{
+    const k = Math.min(1, (t-start)/duration);
+    const v = from + (toValue - from)*k;
+    group.meshes.forEach(m=>{
+      const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return;
+      if(group.activeMorph in d){ inf[d[group.activeMorph]] = v; m.needsUpdate = true; }
+    });
+    if(group.sliderEl) group.sliderEl.value = String(v);
+    if(k<1){ group.tween.raf = requestAnimationFrame(step); }
+  };
+  group.tween.raf = requestAnimationFrame(step);
+}
+canvas.addEventListener('pointerdown', (e)=>{ downPos = {x:e.clientX,y:e.clientY}; });
+canvas.addEventListener('pointerup', (e)=>{
+  if(!assetRoot) return;                     // solo en modo asset
+  if(controls.dragging) return;              // ignorar si fue drag de cámara
+  if(downPos && (Math.hypot(e.clientX-downPos.x, e.clientY-downPos.y) > 3)) return; // click vs drag
+
+  screenToNDC(e);
+  ray.setFromCamera(mouse, camera);
+  const intersects = ray.intersectObject(assetRoot, true);
+  if(!intersects.length) return;
+
+  const gi = findGroupFromObject(intersects[0].object);
+  if(gi==null) return;
+  const group = animGroups[gi];
+
+  // toggle 0 <-> 1 con 0.5s
+  const probe = group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
+  if(!probe) return;
+  const idx = probe.morphTargetDictionary[group.activeMorph];
+  const cur = probe.morphTargetInfluences[idx] ?? 0;
+  const target = (cur >= 0.5) ? 0 : 1;
+  tweenGroupMorph(group, target, 500);
+});
 
 /* ---------- loading ---------- */
 function loadFromURL(url){
