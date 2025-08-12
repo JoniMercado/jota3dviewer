@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Room Viewer — v0.2.4</title>
+<title>Room Viewer — v0.2.3</title>
 
 <script type="importmap">
 {
@@ -39,7 +39,7 @@
 
   /* Right side panel (ACCIONABLES) */
   #sidepanel{
-    position:fixed; right:12px; top:12px;
+    position:fixed; right:12px; top:12px; /* alineado al header */
     width:300px; max-height:calc(100% - 24px);
     display:flex; flex-direction:column; gap:8px; overflow:auto; z-index:9
   }
@@ -47,6 +47,7 @@
     background:rgba(255,255,255,.9); backdrop-filter:blur(6px);
     border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:10px 12px
   }
+  /* summary con estética de la topbar */
   details.block>summary{
     list-style:none; cursor:pointer;
     display:flex; align-items:center; gap:8px;
@@ -58,12 +59,23 @@
   details.block[open]>summary{background:#f3f6ff;border-color:#ccd9ff}
   .panel{padding:8px 10px}
 
-  /* ACCIONABLES */
-  .anim-group{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
-  .anim-group-name{font-size:12px;opacity:.8;padding:2px 6px;background:#f2f2f2;border-radius:6px}
-  .anim-slider{width:160px}
+  /* ACCIONABLES filas nombre + slider */
+  .anim-row{
+    display:flex; align-items:center; gap:10px;
+    padding:6px 0; border-bottom:1px dashed rgba(0,0,0,.06);
+  }
+  .anim-row:last-child{ border-bottom:none; }
+  .anim-name{
+    flex:1 1 auto; min-width:0;
+    font-size:12px; font-weight:600; color:#333;
+    padding:2px 6px; background:#f7f7f7; border:1px solid #eee; border-radius:6px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .anim-slider{
+    flex:0 0 180px; /* <- todos del mismo largo */
+    width:180px;
+  }
   .muted{opacity:.7;font-size:12px}
-  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0}
 
   /* Bottom stats / performance */
   #stats{
@@ -94,21 +106,24 @@
     #logo{height:36px}
     #topbar{
       left:0; right:0; top:0; margin:8px;
-      padding:8px 10px; gap:6px; width:auto; max-width:none;
+      padding:8px 10px; gap:6px;
+      width:auto; max-width:none; border-radius:12px;
     }
 
     #sidepanel{ right:8px; top:8px; width:300px; }
     #animCard{ display:none !important; } /* ocultar ACCIONABLES en móvil */
 
+    /* Barra inferior: ancho completo; pill por defecto; contenido en 2 líneas compactas */
     #stats{
       left:0; right:0; bottom:0;
       border-radius:0;
       padding:8px 10px;
       gap:8px;
     }
-    #statsToggle{ display:inline-flex; align-items:center; color:#444; }
+    #statsToggle{ display:inline-flex; align-items:center; color:#555; }
     #statsContent{ display:none; }
 
+    /* Cuando está “open” en móvil mostramos el contenido en dos filas */
     #stats.open #statsContent{
       display:grid;
       grid-template-columns: repeat(4, auto);
@@ -116,6 +131,7 @@
       align-items:center;
     }
 
+    /* Tags más compactas para que entren en dos líneas */
     #stats .tag{ padding:3px 6px; font-size:11px; line-height:1.15 }
     #stats #stats-reset{ padding:3px 6px; font-size:11px }
   }
@@ -217,7 +233,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping      = THREE.ACESFilmicToneMapping;
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type    = THREE.VSMShadowMap;
+renderer.shadowMap.type    = THREE.VSMShadowMap; // sombras suaves
 
 const scene  = new THREE.Scene();
 scene.background = new THREE.Color(0xc9c9c9);
@@ -250,13 +266,17 @@ let current = null;
 let allNodes = [], doorPanels = [], doorVariantPairs = [], ceilings = [], wallRoots = [];
 let lastHiddenWalls = new Set();
 let assetRoot = null;
-let animGroups = [];                  // shape keys
-let shadowPlane = null;
+
+/* Anim (shape keys) */
+let animGroups = []; // [{name,node,meshes,morphNames,activeMorph,sliderEl,selectEl,tween}]
 const objectToGroup = new Map();
 
-/* Anim mixer y puertas animadas */
-let mixer = null;
-const doorAnimMap = new Map();        // name -> { object, clip, action, open:boolean, value:0..1, sliderEl?, tween? }
+/* Puertas animadas (clips) */
+let doorAnimControls = []; // [{name,node,mixer,clip,action,sliderEl,tween}]
+const objectToDoorIdx = new Map();
+
+/* Sombras */
+let shadowPlane = null;
 
 /* ---------- Bottom stats / performance elements ---------- */
 const statModel = document.getElementById('stat-model');
@@ -309,9 +329,8 @@ function clearModel(){
   scene.remove(current);
   current.traverse?.(o=>{ if(o.geometry) o.geometry.dispose(); const m=o.material; if(m) (Array.isArray(m)?m:[m]).forEach(disposeMat); });
   current=null; allNodes=[]; doorPanels=[]; doorVariantPairs=[]; ceilings=[]; wallRoots=[]; lastHiddenWalls.clear();
-  removeAssetUI(); removeShadowSystem(); objectToGroup.clear();
-  if(mixer){ mixer.stopAllAction(); mixer.uncacheRoot(scene); mixer = null; }
-  doorAnimMap.clear();
+  removeAssetUI(); removeDoorUI(); removeShadowSystem();
+  objectToGroup.clear(); objectToDoorIdx.clear();
   statModel.textContent = 'Model: —';
   statSize.textContent  = 'Size: —';
   statTris.textContent  = 'Tris: —';
@@ -360,7 +379,7 @@ function reparentKeepWorld(child, newParent){
   child.updateMatrixWorld(true);
 }
 
-/* ---------- puertas (rooms, estáticas/variantes) ---------- */
+/* ---------- puertas (rooms) ---------- */
 function findDoorPanels(nodes){
   const panels = nodes.filter(o => /(leftpanel|rightpanel)\d+$/i.test(o.name) && !/_open|_closed/i.test(o.name));
   return panels.map(o=>{
@@ -465,7 +484,7 @@ function enforceDoorVariantExclusivity(defaultState='closed'){
   });
 }
 
-/* ---------- Asset UI (shape keys “anim_”) ---------- */
+/* ---------- Asset UI (shape keys anim_) ---------- */
 function removeAssetUI(){
   animGroups = [];
   const panel = document.getElementById('animPanel');
@@ -486,98 +505,94 @@ function findAnimRoots(asset){
   return arr;
 }
 function stripAnimPrefix(s){ return s?.replace(/^anim_/i,'') ?? s; }
-function stripDoorPrefix(s){ return s?.replace(/^door_/i,'') ?? s; }
+function stripDoorPrefixAndSuffix(s){
+  if(!s) return s;
+  let out = s.replace(/^door_/i,'');
+  out = out.replace(/_\d+$/,''); // quita sufijo numérico _01, _02...
+  return out;
+}
 
-/* ---------- Puertas animadas (clips con nodos “door_*”) ---------- */
-function buildDoorAnimMap(gltf, rootScene){
-  doorAnimMap.clear();
-  if(!gltf.animations || !gltf.animations.length) return;
+/* ---------- Puertas animadas (clips door_*) ---------- */
+function removeDoorUI(){
+  doorAnimControls.forEach(d=>{
+    if(d.mixer){ d.mixer.stopAllAction(); }
+  });
+  doorAnimControls = [];
+}
+function buildDoorControlsFromClips(gltf, scopeRoot){
+  removeDoorUI();
+  const clips = gltf.animations || [];
+  if(!clips.length) return;
 
-  mixer = new THREE.AnimationMixer(rootScene);
+  const panel = document.getElementById('animPanel');
+  if(!panel) return;
 
-  // detectar nodos con tracks cuyo nombre empiece por door_
-  const doorNodes = new Set();
-  for(const clip of gltf.animations){
-    for(const track of clip.tracks){
-      const nodeName = track.name.split('.')[0];
-      if(/^door_/i.test(nodeName)) doorNodes.add(nodeName);
-    }
-  }
+  // agrupar por nodo de destino del primer track
+  const byNode = new Map();
+  clips.forEach(clip=>{
+    if(!(clip && clip.tracks && clip.tracks.length)) return;
+    // track name sample: 'door_XYZ.quaternion' / 'door_XYZ.position' / 'SomeNode.morphTargetInfluences[foo]'
+    const t0 = clip.tracks[0];
+    const m = t0.name.match(/^([^.]*)\./);
+    const nodeName = m ? m[1] : null;
+    if(!nodeName || !/^door_/i.test(nodeName)) return;
+    const node = scopeRoot.getObjectByName(nodeName);
+    if(!node) return;
+    if(!byNode.has(node)) byNode.set(node, []);
+    byNode.get(node).push(clip);
+  });
 
-  doorNodes.forEach(nodeName=>{
-    let subClip = null;
-    for(const clip of gltf.animations){
-      const tracks = clip.tracks.filter(t => t.name.startsWith(nodeName + '.'));
-      if(tracks.length){
-        subClip = new THREE.AnimationClip(`${nodeName}_clip`, clip.duration || 0.5, tracks);
-        break;
-      }
-    }
-    if(!subClip) return;
-    const object = rootScene.getObjectByName(nodeName);
-    if(!object) return;
-    const action = mixer.clipAction(subClip, object);
+  byNode.forEach((node,nodeClips)=>{
+    // elegimos el clip más largo por si hay varios
+    const clip = nodeClips.reduce((a,b)=> (a.duration>=b.duration?a:b));
+    const mixer = new THREE.AnimationMixer(node);
+    const action = mixer.clipAction(clip);
     action.clampWhenFinished = true;
     action.loop = THREE.LoopOnce;
-    action.enabled = true;
-    action.setEffectiveWeight(1);
-    action.play();           // la dejamos “viva”
-    action.paused = true;    // …pero pausada, la pose la fijamos moviendo time manualmente
+    action.play();               // la dejamos "viva"
+    action.paused = true;        // pero pausada; manejamos el tiempo manualmente
     action.time = 0;
 
-    doorAnimMap.set(nodeName, { object, clip: subClip, action, open: false, value: 0, sliderEl: null, tween: null });
+    const ctrl = { name: node.name, node, mixer, clip, action, sliderEl:null, tween:null };
+    doorAnimControls.push(ctrl);
+  });
+
+  // pintar UI (una fila por puerta animada)
+  doorAnimControls.forEach(ctrl=>{
+    const row = document.createElement('div');
+    row.className = 'anim-row';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'anim-name';
+    nameEl.textContent = stripDoorPrefixAndSuffix(ctrl.name); // sin "puertas (animadas)" título
+    const slider = document.createElement('input');
+    slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.01'; slider.value='0'; slider.className='anim-slider';
+    slider.oninput = ()=>{
+      const v = parseFloat(slider.value);
+      const t = v * ctrl.clip.duration; // map 0..1 -> timeline del clip
+      ctrl.action.paused = true;
+      ctrl.action.time = t;
+      ctrl.mixer.update(0); // forzar evaluación inmediata
+    };
+    row.appendChild(nameEl);
+    row.appendChild(slider);
+    panel.appendChild(row);
+    ctrl.sliderEl = slider;
+  });
+
+  // mapear objetos de la puerta para click-pick
+  doorAnimControls.forEach((ctrl, idx)=>{
+    ctrl.node.traverse(n=> objectToDoorIdx.set(n, idx));
   });
 }
 
-/* ---- control por slider (scrub 0..1) ---- */
-function setDoorValue(name, t01){
-  const e = doorAnimMap.get(name); if(!e) return;
-  const dur = e.clip.duration || 0.5;
-  e.value = Math.max(0, Math.min(1, t01));
-  e.open  = e.value >= 0.5;
-  e.action.paused = true;
-  e.action.time = e.value * dur;
-  if(mixer) mixer.update(0); // aplicar pose
-  if(e.sliderEl) e.sliderEl.value = String(e.value);
-}
-
-/* ---- tween click 0.5s ---- */
-function tweenDoorTo(name, target, ms=500){
-  const e = doorAnimMap.get(name); if(!e) return;
-  if(e.tween) cancelAnimationFrame(e.tween);
-  const from = e.value, to = target;
-  const t0 = performance.now();
-  const step = (t)=>{
-    const k = Math.min(1, (t - t0)/ms);
-    const v = from + (to - from)*k;
-    setDoorValue(name, v);
-    if(k<1) e.tween = requestAnimationFrame(step);
-    else { e.tween = null; e.open = (to>=0.5); }
-  };
-  e.tween = requestAnimationFrame(step);
-}
-function toggleDoor(name){
-  const e = doorAnimMap.get(name); if(!e) return;
-  tweenDoorTo(name, e.open ? 0 : 1, 500);
-}
-
-/* ---------- Construcción del panel ACCIONABLES ---------- */
+/* ---------- Construcción del panel ACCIONABLES (unificado) ---------- */
 function buildAnimUI(){
   const panel = document.getElementById('animPanel');
   if(!panel) return;
   panel.innerHTML = '';
 
-  const anyShape = animGroups.length > 0;
-  const anyDoors = doorAnimMap.size > 0;
-
-  if(!anyShape && !anyDoors){
-    document.getElementById('animCard').style.display='none';
-    return;
-  }
-  document.getElementById('animCard').style.display='';
-
-  /* EXPLOTAR (shape keys) */
-  if(anyShape){
+  // EXPLOTAR (para shape keys)
+  if(animGroups.length){
     const explodeRow = document.createElement('label');
     explodeRow.style.cssText='display:flex;align-items:center;gap:6px;margin-bottom:6px;';
     explodeRow.innerHTML = '<input type="checkbox" id="explodeToggle"> EXPLOTAR';
@@ -594,68 +609,43 @@ function buildAnimUI(){
         if(g.sliderEl) g.sliderEl.value = String(val);
       });
     });
-
-    const info = document.createElement('div'); info.className='muted'; info.textContent='Shape keys por grupo'; panel.appendChild(info);
-
-    animGroups.forEach(group=>{
-      const row=document.createElement('div'); row.className='anim-group';
-      const nameBadge=document.createElement('span'); nameBadge.className='anim-group-name'; nameBadge.textContent=stripAnimPrefix(group.name); row.appendChild(nameBadge);
-
-      if(group.morphNames.length>1){
-        const sel=document.createElement('select');
-        group.morphNames.forEach(n=>{ const o=document.createElement('option'); o.value=n;o.textContent=stripAnimPrefix(n); sel.appendChild(o); });
-        sel.onchange=()=>{
-          group.activeMorph=sel.value;
-          const m0=group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
-          if(m0){ const i=m0.morphTargetDictionary[group.activeMorph]; const v=m0.morphTargetInfluences[i]??0; slider.value=String(v); }
-        };
-        row.appendChild(sel); group.selectEl=sel;
-      }
-      const slider=document.createElement('input'); slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.01'; slider.value='0'; slider.className='anim-slider';
-      slider.oninput=()=>{ const val=parseFloat(slider.value);
-        animGroups.forEach(g=>{
-          if(g===group){
-            g.meshes.forEach(m=>{ const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return; if(g.activeMorph in d){ inf[d[g.activeMorph]]=val; m.needsUpdate=true; }});
-          }
-        });
-      };
-      row.appendChild(slider); group.sliderEl=slider; panel.appendChild(row);
-
-      const m0=group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
-      if(m0){ const i=m0.morphTargetDictionary[group.activeMorph]; const v=m0.morphTargetInfluences[i]??0; slider.value=String(v); }
-      if(group.selectEl){ group.selectEl.value=group.activeMorph; group.selectEl.querySelectorAll('option').forEach(o=>{ if(o.value===group.activeMorph) o.selected=true; });}
-    });
   }
 
-  /* PUERTAS animadas: SLIDERS (sin botones) */
-  if(anyDoors){
-    const sep = document.createElement('hr'); sep.style.border='none'; sep.style.borderTop='1px solid #eee'; sep.style.margin='10px 0'; panel.appendChild(sep);
-    const title = document.createElement('div'); title.style.fontWeight='700'; title.style.marginBottom='6px'; title.textContent='PUERTAS (animadas)'; panel.appendChild(title);
+  // shape keys: filas nombre + slider
+  animGroups.forEach(group=>{
+    // título = nombre de grupo
+    const row=document.createElement('div'); row.className='anim-row';
+    const nameBadge=document.createElement('div'); nameBadge.className='anim-name'; nameBadge.textContent=stripAnimPrefix(group.name);
+    const slider=document.createElement('input'); slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.01'; slider.value='0'; slider.className='anim-slider';
 
-    doorAnimMap.forEach((entry, name)=>{
-      const row = document.createElement('div'); row.className='anim-group';
-      const badge = document.createElement('span'); badge.className='anim-group-name'; badge.textContent = stripDoorPrefix(name);
-      const slider = document.createElement('input'); slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.01'; slider.value=String(entry.value); slider.className='anim-slider';
-      slider.oninput = ()=> setDoorValue(name, parseFloat(slider.value));
-      entry.sliderEl = slider;
-      row.append(badge, slider);
-      panel.appendChild(row);
-    });
-  }
+    slider.oninput=()=>{ const val=parseFloat(slider.value);
+      group.meshes.forEach(m=>{
+        const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return;
+        if(group.activeMorph in d){ inf[d[group.activeMorph]]=val; m.needsUpdate=true; }
+      });
+    };
+    row.appendChild(nameBadge);
+    row.appendChild(slider);
+    panel.appendChild(row);
+    group.sliderEl=slider;
+
+    // sync inicial
+    const m0=group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
+    if(m0){ const i=m0.morphTargetDictionary[group.activeMorph]; const v=m0.morphTargetInfluences[i]??0; slider.value=String(v); }
+  });
+
+  // (las puertas animadas se agregan después de cargar los clips con buildDoorControlsFromClips)
 }
 
-function setupAssetControlsMulti(rootScene){
-  // Asset root = model_*
+/* ---------- Setup de controles de asset (shape keys + sombras + clips de puertas) ---------- */
+function setupAssetControlsMulti(rootScene, gltf=null){
   assetRoot = null;
   rootScene.traverse(o=>{ if(!assetRoot && o.name && /^model_/i.test(o.name)) assetRoot = o; });
-
-  const side = document.getElementById('sidepanel');
-  if(!assetRoot){ removeAssetUI(); setUIMode('room'); removeShadowSystem(); objectToGroup.clear(); side.style.display='none'; return; }
+  if(!assetRoot){ removeAssetUI(); removeDoorUI(); setUIMode('room'); removeShadowSystem(); objectToGroup.clear(); objectToDoorIdx.clear(); return; }
 
   setUIMode('asset');
-  side.style.display='';
 
-  // Shape keys agrupados por anim_*
+  // shape keys (anim_)
   const animRoots = findAnimRoots(assetRoot);
   const groups = [];
   objectToGroup.clear();
@@ -667,9 +657,12 @@ function setupAssetControlsMulti(rootScene){
     groups.push({ name: ar.name, node: ar, meshes, morphNames, activeMorph: morphNames[0], selectEl:null, sliderEl:null, tween:null });
   });
   animGroups = groups;
+  buildAnimUI();
+
+  // puertas animadas desde clips (door_*)
+  if(gltf){ buildDoorControlsFromClips(gltf, rootScene); }
 
   ensureShadowSystem();
-  buildAnimUI();
 }
 
 /* ---------- Sombras suaves (shadow catcher) ---------- */
@@ -686,7 +679,7 @@ function ensureShadowSystem(){
     scene.add(dirLight);
   }
   if(!shadowPlane){
-    const mat = new THREE.ShadowMaterial({ opacity: 0.08 }); // más suave
+    const mat = new THREE.ShadowMaterial({ opacity: 0.096 }); // 20% menos opaco vs base; sumado a VSM radius -> ~30% más suave visual
     const geo = new THREE.PlaneGeometry(1,1);
     shadowPlane = new THREE.Mesh(geo, mat);
     shadowPlane.rotation.x = -Math.PI/2;
@@ -702,6 +695,7 @@ function ensureShadowSystem(){
   shadowPlane.position.set(ctr.x, box.min.y + 0.0001, ctr.z);
   shadowPlane.scale.set(size.x*1.05, size.z*1.05, 1);
 
+  // luz: inclinada y rotada ~30°
   const baseDX = size.x * 0.25;
   const baseDZ = size.z * 0.25;
   const ang = THREE.MathUtils.degToRad(30);
@@ -713,7 +707,7 @@ function ensureShadowSystem(){
   dirLight.target.position.set(ctr.x, ctr.y, ctr.z);
   scene.add(dirLight.target);
 
-  dirLight.shadow.radius = 5.5; // suavidad VSM
+  dirLight.shadow.radius = 5.2; // +30% suavidad aprox (antes 4.0)
 
   const cam = dirLight.shadow.camera;
   const r = Math.max(size.x, size.z) * 0.65;
@@ -757,18 +751,12 @@ function place(root, gltf=null){
 
   current = root; scene.add(root);
 
-  // Detectar asset model_
   assetRoot = null;
   current.traverse(o=>{ if(!assetRoot && o.name && /^model_/i.test(o.name)) assetRoot = o; });
 
-  // Puertas animadas (clips door_*)
-  if(mixer){ mixer.stopAllAction(); mixer.uncacheRoot(scene); }
-  mixer = null; doorAnimMap.clear();
-  if(gltf) buildDoorAnimMap(gltf, current);
-
   setUIMode(assetRoot ? 'asset' : 'room');
-  setupAssetControlsMulti(current);   // arma panel (shape keys) + sombras
-  if(doorAnimMap.size>0) buildAnimUI(); // agrega sliders de puertas
+  if(assetRoot){ setupAssetControlsMulti(current, gltf); ensureShadowSystem(); }
+  else{ removeAssetUI(); removeDoorUI(); removeShadowSystem(); objectToGroup.clear(); objectToDoorIdx.clear(); }
 
   const maxDim = Math.max(size.x,size.y,size.z);
   camera.position.setScalar(maxDim*1.6).setY(maxDim*0.8);
@@ -780,7 +768,7 @@ function place(root, gltf=null){
   updateTopbarVar();
 }
 
-/* ---------- doors actions (rooms estáticas) ---------- */
+/* ---------- doors actions ---------- */
 function setDoorRotation(o, open){
   const amt = open ? 1 : 0;
   const rad = THREE.MathUtils.degToRad(90 * o.userData.sign * THREE.MathUtils.clamp(amt,0,1));
@@ -833,10 +821,9 @@ function updateAutoHide(){
   for(const wr of front){ if(!lastHiddenWalls.has(wr)){ wr.visible=false; lastHiddenWalls.add(wr);} }
 }
 
-/* ---------- Click: shape key y puertas ---------- */
+/* ---------- Click-to-toggle (shape key o puerta animada) ---------- */
 const mouse = new THREE.Vector2();
 let downPos = null;
-
 function screenToNDC(e){
   const rect = renderer.domElement.getBoundingClientRect();
   mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -850,71 +837,62 @@ function findGroupFromObject(obj){
   }
   return null;
 }
-function ancestorDoorName(obj){
-  let p=obj;
-  while(p){
-    if(p.name && /^door_/i.test(p.name)) return p.name;
-    p = p.parent;
-  }
-  return null;
-}
-
-function tweenGroupMorph(group, toValue, duration=500){
-  if(!group) return;
-  const m0 = group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
-  if(!m0) return;
-  const i = m0.morphTargetDictionary[group.activeMorph];
-  const from = m0.morphTargetInfluences[i] ?? 0;
-
+function tweenValue(updateFn, from, to, duration=500){
   const start = performance.now();
-  if(group.tween) cancelAnimationFrame(group.tween.raf);
-  group.tween = { raf: 0 };
-
-  const step = (t)=>{
+  function step(t){
     const k = Math.min(1, (t-start)/duration);
-    const v = from + (toValue - from)*k;
-    group.meshes.forEach(m=>{
-      const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return;
-      if(group.activeMorph in d){ inf[d[group.activeMorph]] = v; m.needsUpdate = true; }
-    });
-    if(group.sliderEl) group.sliderEl.value = String(v);
-    if(k<1){ group.tween.raf = requestAnimationFrame(step); }
-  };
-  group.tween.raf = requestAnimationFrame(step);
+    updateFn(from + (to-from)*k);
+    if(k<1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
 }
-
 canvas.addEventListener('pointerdown', (e)=>{ downPos = {x:e.clientX,y:e.clientY}; });
 canvas.addEventListener('pointerup', (e)=>{
   if(controls.dragging) return;
   if(downPos && (Math.hypot(e.clientX-downPos.x, e.clientY-downPos.y) > 3)) return;
+
   const rect = renderer.domElement.getBoundingClientRect();
   if(e.clientY < rect.top + (topbar?.offsetHeight||0)) return;
 
   screenToNDC(e);
   ray.setFromCamera(mouse, camera);
-  const targetRoot = assetRoot ?? current;
-  if(!targetRoot) return;
-  const intersects = ray.intersectObject(targetRoot, true);
+  const rootPick = assetRoot || current || scene;
+  const intersects = ray.intersectObject(rootPick, true);
   if(!intersects.length) return;
 
   const obj = intersects[0].object;
 
-  // 1) Si tocamos una puerta animada, toggle tween en 0.5s
-  const dName = ancestorDoorName(obj);
-  if(dName && doorAnimMap.has(dName)){ toggleDoor(dName); return; }
+  // 1) Si pertenece a una puerta animada (clip), toggle 0 <-> 1 (0.5s) y sincroniza slider
+  if(objectToDoorIdx.has(obj)){
+    const i = objectToDoorIdx.get(obj);
+    const ctrl = doorAnimControls[i];
+    const curr = (ctrl.action.time / ctrl.clip.duration) || 0;
+    const target = curr >= 0.5 ? 0 : 1;
+    tweenValue(v=>{
+      ctrl.action.time = v * ctrl.clip.duration;
+      ctrl.action.paused = true;
+      ctrl.mixer.update(0);
+      if(ctrl.sliderEl) ctrl.sliderEl.value = String(v);
+    }, curr, target, 500);
+    return;
+  }
 
-  // 2) Si tocamos un grupo de shape keys, tween 0 <-> 1
-  if(assetRoot){
-    const gi = findGroupFromObject(obj);
-    if(gi!=null){
-      const group = animGroups[gi];
-      const probe = group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
-      if(!probe) return;
-      const idx = probe.morphTargetDictionary[group.activeMorph];
-      const cur = probe.morphTargetInfluences[idx] ?? 0;
-      const target = (cur >= 0.5) ? 0 : 1;
-      tweenGroupMorph(group, target, 500);
-    }
+  // 2) Si pertenece a un grupo de shape keys, toggle 0 <-> 1 (0.5s) del morph activo
+  const gi = findGroupFromObject(obj);
+  if(gi!=null){
+    const group = animGroups[gi];
+    const m0 = group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
+    if(!m0) return;
+    const idx = m0.morphTargetDictionary[group.activeMorph];
+    const cur = m0.morphTargetInfluences[idx] ?? 0;
+    const target = (cur >= 0.5) ? 0 : 1;
+    tweenValue(v=>{
+      group.meshes.forEach(m=>{
+        const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return;
+        if(group.activeMorph in d){ inf[d[group.activeMorph]] = v; m.needsUpdate = true; }
+      });
+      if(group.sliderEl) group.sliderEl.value = String(v);
+    }, cur, target, 500);
   }
 });
 
@@ -929,7 +907,8 @@ function loadBlob(file){
       URL.revokeObjectURL(url);
     },
     undefined,
-    e=>{ console.error(e); setMsg('Error with local file'); });
+    e=>{ console.error(e); setMsg('Error with local file'); }
+  );
 }
 
 /* ---------- UI ---------- */
@@ -1004,7 +983,8 @@ renderer.setAnimationLoop(()=>{
   statText.textContent  = `Tex: ${info.memory.textures}`;
   statRot.textContent   = `Rotate: ${controls.autoRotate ? 'On' : 'Off'}`;
 
-  if(mixer) mixer.update(dt/1000); // por si hay acciones activas (aunque las puertas van pausadas + pose por time)
+  // avanzar mixers de puertas si hiciera falta (usamos evaluation manual en sliders / tween, pero por si hay residuo)
+  doorAnimControls.forEach(d=> d.mixer && d.mixer.update(0));
 
   controls.update();
   updateAutoHide();
