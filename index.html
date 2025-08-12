@@ -15,7 +15,15 @@
 </script>
 
 <style>
-  :root{ --topbarH:72px; --topbarW:360px; }
+  :root{
+    --topbarH:72px;         /* se actualiza por JS */
+    --topbarW:320px;        /* se actualiza por JS (móvil) */
+    --topbarX:8px;          /* se actualiza por JS (móvil) */
+    --stackGap:8px;         /* separación vertical estándar en móvil */
+    --padCard:10px 12px;    /* padding por defecto de cards */
+    --radiusCard:12px;
+    --edgeGap:8px;          /* margen lateral en móvil */
+  }
 
   html,body{height:100%;margin:0}
   body{
@@ -28,15 +36,14 @@
     position:fixed; left:12px; top:12px;
     display:inline-flex; gap:8px; flex-wrap:wrap; align-items:center;
     background:rgba(255,255,255,.85); backdrop-filter:blur(6px);
-    border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:10px 12px; z-index:10;
-    width:max-content; max-width:calc(100vw - 24px);
-    overflow:hidden; /* mantiene las esquinas */
+    border:1px solid rgba(0,0,0,.08); border-radius:var(--radiusCard); padding:var(--padCard); z-index:10;
+    width:max-content; max-width:calc(100vw - 24px);  /* escritorio */
   }
   #topbar button{background:#1e68ff;border:none;color:white;padding:6px 10px;border-radius:6px;cursor:pointer}
   #topbar small{opacity:.7}
-  #topbar label{display:flex;align-items:center;gap:6px}
   #fileInput{display:none}
   #logo{height:48px;margin-right:12px;border-radius:6px}
+  label{display:flex;align-items:center;gap:6px}
 
   /* Right side panel (ACCIONABLES) */
   #sidepanel{
@@ -46,7 +53,7 @@
   }
   .card{
     background:rgba(255,255,255,.9); backdrop-filter:blur(6px);
-    border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:10px 12px
+    border:1px solid rgba(0,0,0,.08); border-radius:var(--radiusCard); padding:var(--padCard)
   }
   details.block>summary{
     list-style:none; cursor:pointer;
@@ -67,106 +74,86 @@
   }
   .act-row input[type="range"]{ width:200px }
   .muted{opacity:.7;font-size:12px}
-
-  /* Select estilo “accionable” */
   .act-row select{
     width:200px; padding:6px 8px;
     border:1px solid #ccc; border-radius:6px;
     background:#f5f5f5; color:#111; font:inherit;
   }
 
-  /* Panel VARIANTES */
-  #variantsCard{ display:none; } /* se muestra si hay variantes */
+  /* VARIANTES: card reutiliza estilos .card y details.block */
+  #variantsCard{ z-index:9 }
+  #variantsPanel .act-row{ margin-top:6px }
 
   /* Bottom stats / performance */
   #stats{
     position:fixed; left:12px; right:12px; bottom:12px;
     background:rgba(255,255,255,.9); backdrop-filter:blur(6px);
-    border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:8px 12px;
+    border:1px solid rgba(0,0,0,.08); border-radius:var(--radiusCard); padding:8px 12px;
     display:flex; flex-wrap:wrap; align-items:center; gap:10px; z-index:5
   }
   #stats .tag{background:#f2f4f8;border:1px solid #dfe3eb;border-radius:8px;padding:4px 8px;font-size:12px}
   #stats button{background:#eee;border:1px solid #ccc;border-radius:6px;padding:4px 8px;cursor:pointer}
-
-  /* Toggle móvil (pill “Performance”) */
-  #statsToggle{
-    display:none;
-    background:transparent; color:#444; border:1px solid #cfd6e0;
-    border-radius:999px; padding:6px 12px; font-weight:600; cursor:pointer;
-  }
-  #stats.open #statsToggle{ background:#2b7aff; color:#fff; border-color:transparent; }
-  #statsContent{ display:flex; flex-wrap:wrap; align-items:center; gap:10px }
 
   #drop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;border:2px dashed #2a2f36;border-radius:16px;background:rgba(30,104,255,.08);color:#1e68ff;pointer-events:auto;z-index:999}
   canvas{display:block;width:100%;height:100%}
 
   /* ---------- Mobile tweaks ---------- */
   @media (max-width: 640px){
-    #logo{height:36px}
+    :root{
+      --stackGap:8px;
+      --edgeGap:8px;
+    }
 
-    /* Topbar centrada, recortada a ambos lados y redondeada */
+    #logo{height:36px}
+    /* Topbar: no ocupar todo el ancho, bordes redondeados en ambos lados,
+       mismo margen lateral que vertical (edgeGap) */
     #topbar{
-      left:50%; top:8px; transform:translateX(-50%);
-      padding:8px 10px; gap:6px;
-      max-width:calc(100vw - 16px); /* deja margen a ambos lados */
-      border-radius:12px;
+      left:var(--topbarX); top:var(--stackGap);
+      max-width:none;
+      width:var(--topbarW);
+      border-radius:var(--radiusCard);
     }
 
     /* Ocultar ACCIONABLES en móvil */
-    #sidepanel{ right:auto; top:auto; } /* sin impacto, pero evita conflictos */
+    #sidepanel{ right:var(--edgeGap); top:var(--edgeGap); width:340px; }
     #animCard{ display:none !important; }
 
-    /* VARIANTES: debajo de topbar, mismo ancho y centrado */
-    #variantsCard{
+    /* VARIANTES en móvil:
+       fija debajo del topbar, misma izquierda y mismo ancho,
+       separación vertical igual a --stackGap */
+    #variantsCard.mobile{
       position:fixed;
-      left:50%; transform:translateX(-50%);
-      top:calc(var(--topbarH) + 8px);
+      left:var(--topbarX);
+      top:calc(var(--stackGap) + var(--topbarH) + var(--stackGap)); /* gap = margen superior */
       width:var(--topbarW);
-      max-width:calc(100vw - 16px);
-      z-index:8;
-      border-radius:12px;
-      overflow:hidden; /* asegura esquinas */
-      display:none; /* visible sólo si hay variantes */
+      padding:8px 10px; /* más compacto en móvil */
     }
-    /* Compacto sólo en móvil */
-    #variantsCard .panel{ padding:6px 8px; }
-    #variantsCard .act-row{
+    #variantsCard.mobile details.block>summary{
+      padding:8px 10px; font-size:13px;
+    }
+    #variantsPanel .act-row{
       grid-template-columns: 1fr 140px;
-      margin:6px 0;
-      font-size:12px;
     }
-    #variantsCard .act-row select{
-      width:140px; font-size:12px; padding:5px 6px; line-height:1.1;
-    }
-    #variantsCard summary{ padding:8px 10px; }
+    #variantsPanel .act-row select{ width:140px; font-size:12px; padding:5px 6px; }
 
     /* Barra inferior móvil */
     #stats{ left:0; right:0; bottom:0; border-radius:0; padding:8px 10px; gap:8px; }
-    #statsToggle{ display:inline-flex; align-items:center; color:#333; }
+    #statsToggle{ display:inline-flex; align-items:center; color:#333; background:transparent; border:1px solid #cfd6e0; border-radius:999px; padding:6px 12px; font-weight:600; cursor:pointer; }
     #statsContent{ display:none; }
-
     #stats.open #statsContent{
-      display:grid;
-      grid-template-columns: repeat(4, auto);
-      column-gap:6px; row-gap:4px;
-      align-items:center;
+      display:grid; grid-template-columns: repeat(4, auto); column-gap:6px; row-gap:4px; align-items:center;
     }
     #stats .tag{ padding:3px 6px; font-size:11px; line-height:1.15 }
     #stats #stats-reset{ padding:3px 6px; font-size:11px }
-
-    /* Fallback para sliders/selects genéricos si se muestran */
-    .act-row{ grid-template-columns: 1fr 140px; }
-    .act-row input[type="range"]{ width:140px }
-    .act-row select{ width:140px; font-size:12px; padding:5px 6px; }
   }
 </style>
 </head>
 <body>
+  <!-- Top row -->
   <div id="topbar">
     <img id="logo" src="https://jonimercado.github.io/threejs-viewer/jota%203d.jpg" alt="Logo">
     <button id="fileBtn">Open .glb/.gltf</button>
     <input type="file" id="fileInput" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" />
-
     <!-- Rooms controls (ocultos cuando es asset) -->
     <label style="display:none"><input type="checkbox" id="doorsToggle"> All Doors Open</label>
     <label style="display:none"><input type="checkbox" id="autoHideToggle" checked> Auto-hide front wall</label>
@@ -176,22 +163,28 @@
     <small id="msg"></small>
   </div>
 
-  <!-- Side panel: ACCIONABLES + VARIANTES (en escritorio) -->
+  <!-- Side panel: ACCIONABLES -->
   <div id="sidepanel" style="display:none">
     <details id="animCard" class="block card" open style="display:none">
       <summary>ACCIONABLES</summary>
       <div class="panel" id="animPanel"></div>
     </details>
 
+    <!-- VARIANTES (en escritorio vive aquí; en móvil se reposiciona) -->
     <details id="variantsCard" class="block card" open style="display:none">
       <summary>VARIANTES</summary>
-      <div class="panel" id="variantsPanel"></div>
+      <div class="panel" id="variantsPanel">
+        <div class="act-row">
+          <div>Material</div>
+          <select id="variantSelect"></select>
+        </div>
+      </div>
     </details>
   </div>
 
   <!-- Bottom stats / performance -->
   <div id="stats">
-    <button id="statsToggle" aria-expanded="false">Performance</button>
+    <button id="statsToggle" aria-expanded="false" style="display:none">Performance</button>
     <div id="statsContent">
       <span class="tag" id="stat-model">Model: —</span>
       <span class="tag" id="stat-size">Size: —</span>
@@ -230,15 +223,38 @@ import { RoomEnvironment }from 'three/addons/environments/RoomEnvironment.js';
 
 /* ---------- layout helper ---------- */
 const topbar = document.getElementById('topbar');
+const variantsCard = document.getElementById('variantsCard');
 function updateTopbarVar(){
   const h = topbar?.offsetHeight || 72;
-  const w = Math.min(topbar?.offsetWidth || 360, window.innerWidth - 16);
+  const w = topbar?.offsetWidth  || 320;
+  const x = topbar?.offsetLeft   || 8;
   document.documentElement.style.setProperty('--topbarH', `${h}px`);
   document.documentElement.style.setProperty('--topbarW', `${w}px`);
+  document.documentElement.style.setProperty('--topbarX', `${x}px`);
 }
 new ResizeObserver(updateTopbarVar).observe(topbar);
 addEventListener('load', updateTopbarVar);
 addEventListener('resize', updateTopbarVar);
+
+/* mover VARIANTES según breakpoint */
+const mql = window.matchMedia('(max-width: 640px)');
+function placeVariantsForViewport(){
+  if(!variantsCard) return;
+  if(mql.matches){
+    // móvil: debajo del topbar, mismo ancho y misma izquierda
+    variantsCard.classList.add('mobile');
+    variantsCard.style.display = variantsCard.dataset.hasVariants === '1' ? '' : 'none';
+    document.body.appendChild(variantsCard);
+  } else {
+    // escritorio: vuelve al sidepanel, debajo de ACCIONABLES
+    variantsCard.classList.remove('mobile');
+    const sidepanel = document.getElementById('sidepanel');
+    sidepanel.appendChild(variantsCard);
+    variantsCard.style.display = variantsCard.dataset.hasVariants === '1' ? '' : 'none';
+  }
+  updateTopbarVar();
+}
+mql.addEventListener('change', placeVariantsForViewport);
 
 /* ---------- password gate ---------- */
 const VIEWER_PASSWORD = 'demo';
@@ -307,9 +323,9 @@ const objectToGroup = new Map(); // for morph groups
 const objectToDoor  = new Map(); // for door groups
 let lastGLBBytes = null;
 
-/* Variants UI (in-panel) */
-let variantRowEl = null;
-let variantSelectEl = null;
+/* Variants UI refs */
+const variantSelect = document.getElementById('variantSelect');
+variantsCard.dataset.hasVariants = '0'; // se pone a '1' cuando hay variantes
 
 /* ---------- Bottom stats / performance elements ---------- */
 const statModel = document.getElementById('stat-model');
@@ -352,6 +368,7 @@ function setUIMode(mode){
   if(!isAsset) removeShadowSystem();
 
   updateTopbarVar();
+  placeVariantsForViewport();
 }
 setUIMode('clean');
 
@@ -371,13 +388,10 @@ function clearModel(){
   statBytes.textContent = 'GLB: —';
   mixer = null;
 
-  // limpiar UI de variantes
-  if (variantRowEl?.parentNode) variantRowEl.parentNode.removeChild(variantRowEl);
-  variantRowEl = null; variantSelectEl = null;
-
-  // ocultar tarjeta de variantes
-  document.getElementById('variantsCard').style.display = 'none';
-  document.getElementById('variantsPanel').innerHTML = '';
+  // limpiar UI variantes
+  variantSelect.innerHTML = '';
+  variantsCard.style.display = 'none';
+  variantsCard.dataset.hasVariants = '0';
 }
 function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geometry; t += g?.index ? g.index.count/3 : (g?.attributes?.position?.count||0)/3; }}); return Math.round(t); }
 function updateStats(sizeVec){
@@ -641,6 +655,8 @@ function renderActionsPanel(){
 
   document.getElementById('animCard').style.display='';
 }
+
+/* ---------- Door anim helpers ---------- */
 function setDoorValue(group, value){
   group.value = THREE.MathUtils.clamp(value, 0, 1);
   if(!group.action) return;
@@ -719,21 +735,24 @@ function removeShadowSystem(){
   }
 }
 
-/* ---------- Variants (KHR_materials_variants) - en panel propio ---------- */
+/* ---------- Variants (KHR_materials_variants) - en panel ---------- */
 async function setupVariants(gltf){
-  const variantsCard = document.getElementById('variantsCard');
-  const vPanel = document.getElementById('variantsPanel');
-  vPanel.innerHTML = '';
+  // limpiar UI previa
+  variantSelect.innerHTML = '';
   variantsCard.style.display = 'none';
+  variantsCard.dataset.hasVariants = '0';
 
   const parser = gltf.parser;
   const json   = parser.json;
   const rootExt = json.extensions && json.extensions.KHR_materials_variants;
-  if(!rootExt || !rootExt.variants || !rootExt.variants.length) return;
+  if(!rootExt || !rootExt.variants || !rootExt.variants.length){
+    placeVariantsForViewport();
+    return;
+  }
 
   const variantNames = rootExt.variants.map(v => v.name);
 
-  // cache de materiales
+  // cache materiales
   const matCache = new Map();
   const getMaterialByIndex = (i) => {
     if (!matCache.has(i)) matCache.set(i, parser.getDependency('material', i));
@@ -773,31 +792,26 @@ async function setupVariants(gltf){
     await Promise.all(pending);
   }
 
-  // construir fila (act-row) dentro de VARIANTES
-  const row   = document.createElement('div'); row.className = 'act-row';
-  const label = document.createElement('div'); label.textContent = 'Material';
-  const select = document.createElement('select');
-
+  // construir opciones
   variantNames.forEach((n, i)=>{
     const opt = document.createElement('option');
     opt.value = n; opt.textContent = n;
     if (i===0) opt.selected = true;
-    select.appendChild(opt);
+    variantSelect.appendChild(opt);
   });
 
-  row.appendChild(label);
-  row.appendChild(select);
-  vPanel.appendChild(row);
-
-  // mostrar tarjeta
+  // mostrar card y ubicar según viewport
+  variantsCard.dataset.hasVariants = '1';
   variantsCard.style.display = '';
+  placeVariantsForViewport();
 
-  // aplicar por defecto y manejar cambios
+  // aplicar primera por defecto
   await applyVariant(gltf.scene, variantNames[0]);
-  select.onchange = async ()=> { await applyVariant(gltf.scene, select.value); };
+  variantSelect.onchange = async ()=> { await applyVariant(gltf.scene, variantSelect.value); };
 }
 
 /* ---------- placing ---------- */
+let mixerCreated = false;
 function place(root, clips){
   root.traverse(o=>{
     if(o.isMesh && /collider/i.test(o.name)) o.visible=false;
@@ -833,7 +847,7 @@ function place(root, clips){
     removeAssetUI(); removeShadowSystem(); objectToGroup.clear(); objectToDoor.clear();
   }
 
-  mixer = mixer || new THREE.AnimationMixer(current);
+  if(!mixerCreated){ mixer = new THREE.AnimationMixer(current); mixerCreated = true; }
 
   const maxDim = Math.max(size.x,size.y,size.z);
   camera.position.setScalar(maxDim*1.6).setY(maxDim*0.8);
@@ -842,7 +856,8 @@ function place(root, clips){
 
   statModel.textContent = `Model: ${root.name || '(scene)'}`;
   updateStats(size);
-  updateTopbarVar(); // asegura ancho/alto para móvil (VARIANTES)
+  updateTopbarVar();
+  placeVariantsForViewport();
 }
 
 /* ---------- auto-hide wall (rooms) ---------- */
@@ -945,7 +960,7 @@ function loadBlob(file){
   const url = URL.createObjectURL(file);
   loader.load(url, async (g)=>{
       place(g.scene, g.animations||[]);
-      await setupVariants(g); // variantes en panel propio
+      await setupVariants(g); // variantes en panel
       setMsg(file.name);
       URL.revokeObjectURL(url);
     },
@@ -984,9 +999,11 @@ function isMobile(){ return window.matchMedia('(max-width: 640px)').matches; }
 function applyStatsMode(){
   if(isMobile()){
     statsEl.classList.remove('open');
+    statsToggle.style.display = 'inline-flex';
     statsToggle.setAttribute('aria-expanded','false');
   }else{
-    statsEl.classList.add('open');
+    statsEl.classList.add('open'); // visible en desktop
+    statsToggle.style.display = 'none';
     statsToggle.setAttribute('aria-expanded','true');
   }
 }
@@ -994,8 +1011,9 @@ statsToggle.addEventListener('click', ()=>{ if(!isMobile()) return;
   const open = statsEl.classList.toggle('open');
   statsToggle.setAttribute('aria-expanded', open ? 'true':'false');
 });
-addEventListener('resize', applyStatsMode);
+addEventListener('resize', ()=>{ applyStatsMode(); placeVariantsForViewport(); updateTopbarVar(); });
 applyStatsMode();
+placeVariantsForViewport();
 
 /* ---------- resize & loop ---------- */
 function resize(){
@@ -1016,12 +1034,12 @@ renderer.setAnimationLoop(()=>{
   fpsEMA = fpsEMA ? (fpsEMA*0.9 + fpsInst*0.1) : fpsInst;
 
   const info = renderer.info;
-  document.getElementById('stat-fps').textContent   = `FPS: ${fpsEMA.toFixed(0)}`;
-  document.getElementById('stat-ms').textContent    = `ms: ${dt.toFixed(1)}`;
-  document.getElementById('stat-calls').textContent = `Calls: ${info.render.calls}`;
-  document.getElementById('stat-geoms').textContent = `Geoms: ${info.memory.geometries}`;
-  document.getElementById('stat-text').textContent  = `Tex: ${info.memory.textures}`;
-  document.getElementById('stat-rot').textContent   = `Rotate: ${controls.autoRotate ? 'On' : 'Off'}`;
+  statFPS.textContent   = `FPS: ${fpsEMA.toFixed(0)}`;
+  statMS.textContent    = `ms: ${dt.toFixed(1)}`;
+  statCalls.textContent = `Calls: ${info.render.calls}`;
+  statGeoms.textContent = `Geoms: ${info.memory.geometries}`;
+  statText.textContent  = `Tex: ${info.memory.textures}`;
+  statRot.textContent   = `Rotate: ${controls.autoRotate ? 'On' : 'Off'}`;
 
   if(mixer) mixer.update(dt/1000);
 
