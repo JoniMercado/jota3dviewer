@@ -180,7 +180,6 @@ import { DRACOLoader }    from 'three/addons/loaders/DRACOLoader.js';
 import { KTX2Loader }     from 'three/addons/loaders/KTX2Loader.js';
 import { OrbitControls }  from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment }from 'three/addons/environments/RoomEnvironment.js';
-import { KHRMaterialsVariants } from 'https://unpkg.com/three@0.164.1/examples/jsm/utils/KHRMaterialsVariants.js?module';
 
 
 /* ---------- layout helper ---------- */
@@ -677,31 +676,84 @@ function removeShadowSystem(){
 
 /* ---------- Variants (KHR_materials_variants) ---------- */
 async function setupVariants(gltf){
+  // Limpieza UI
   variantsHelper = null;
   variantRow.style.display = 'none';
   variantSelect.innerHTML = '';
 
-  // Usamos el helper ya importado de manera estática
-  const helper = new KHRMaterialsVariants(gltf);
-  const names = helper.getVariantNames();
-  if (!names || !names.length) return;
+  const parser = gltf.parser;
+  const json   = parser.json;
+  const extRoot = json.extensions && json.extensions.KHR_materials_variants;
+  if(!extRoot || !extRoot.variants || !extRoot.variants.length) return;
 
-  variantsHelper = helper;
+  // Nombres de variantes
+  const variantNames = extRoot.variants.map(v => v.name);
+  // Cache de materiales cargados por índice → Promise<Material>
+  const matCache = new Map();
+  const getMaterialByIndex = (i) => {
+    if (!matCache.has(i)) matCache.set(i, parser.getDependency('material', i));
+    return matCache.get(i);
+  };
 
-  // UI
-  names.forEach((n, i)=>{
-    const opt = document.createElement('option');
-    opt.value = n; opt.textContent = n;
-    if(i===0) opt.selected = true;
-    variantSelect.appendChild(opt);
+  // Guardar material original por si se elige una variante que no mapea ese mesh
+  gltf.scene.traverse(o => {
+    if (o.isMesh && o.material && !o.userData._origMaterial) {
+      o.userData._origMaterial = o.material;
+    }
   });
+
+  async function applyVariant(root, name){
+    const nameToIdx = new Map(extRoot.variants.map((v, i) => [v.name, i]));
+    const wantedIdx = nameToIdx.get(name);
+    if (wantedIdx == null) return;
+
+    const pending = [];
+
+    root.traverse(obj => {
+      if (!obj.isMesh) return;
+
+      const ext = obj.userData?.gltfExtensions?.KHR_materials_variants;
+      if (!ext || !ext.mappings) {
+        // si no tiene mapping, restauramos original por si venía de otra variante
+        if (obj.userData._origMaterial) obj.material = obj.userData._origMaterial;
+        return;
+      }
+
+      // Buscar un mapping que incluya la variante elegida
+      let chosen = null;
+      for (const m of ext.mappings) {
+        if (m.variants && m.variants.includes(wantedIdx)) { chosen = m; break; }
+      }
+
+      if (chosen && typeof chosen.material === 'number') {
+        pending.push(
+          getMaterialByIndex(chosen.material).then(mat => { obj.material = mat; })
+        );
+      } else {
+        // No hay override para este mesh en esta variante → restaurar original
+        if (obj.userData._origMaterial) obj.material = obj.userData._origMaterial;
+      }
+    });
+
+    await Promise.all(pending);
+  }
+
+  // Poblar UI
+  for (let i=0; i<variantNames.length; i++){
+    const opt = document.createElement('option');
+    opt.value = variantNames[i];
+    opt.textContent = variantNames[i];
+    if (i===0) opt.selected = true;
+    variantSelect.appendChild(opt);
+  }
   variantRow.style.display = '';
 
-  // aplicar la primera por defecto
-  await helper.selectVariant(gltf.scene, names[0]);
+  // Aplicar primera por defecto
+  await applyVariant(gltf.scene, variantNames[0]);
 
-  variantSelect.onchange = async ()=>{
-    await helper.selectVariant(gltf.scene, variantSelect.value);
+  // Cambio desde el select
+  variantSelect.onchange = async () => {
+    await applyVariant(gltf.scene, variantSelect.value);
   };
 }
 
