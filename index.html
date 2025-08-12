@@ -705,24 +705,7 @@
   });
 
   /* ---------- loading ---------- */
-  function humanBytes(b){
-    if(b==null) return '—';
-    const u=['B','KB','MB','GB']; let i=0; let n=b;
-    while(n>=1024 && i<u.length-1){ n/=1024; i++; }
-    return `${n.toFixed(n<10&&i>0?1:0)} ${u[i]}`;
-  }
-  function loadBlob(file){
-    setUIMode('clean'); setMsg('Loading local file…'); clearModel();
-    const url = URL.createObjectURL(file);
-    document.getElementById('stat-bytes').textContent = `GLB: ${humanBytes(file.size)}`;
-    loader.load(url, async (g)=>{
-        place(g.scene, g.animations||[]);
-        await setupVariants(g); // NUEVA caja VARIANTES
-        setMsg(file.name);
-        URL.revokeObjectURL(url);
-      },
-      undefined, e=>{ console.error(e); setMsg('Error with local file'); });
-  }
+
 
   /* ---------- UI ---------- */
   const fileInput = document.getElementById('fileInput');
