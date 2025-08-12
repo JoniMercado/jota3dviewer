@@ -180,7 +180,8 @@ import { DRACOLoader }    from 'three/addons/loaders/DRACOLoader.js';
 import { KTX2Loader }     from 'three/addons/loaders/KTX2Loader.js';
 import { OrbitControls }  from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment }from 'three/addons/environments/RoomEnvironment.js';
-import { KHRMaterialsVariants } from 'three/addons/utils/KHRMaterialsVariants.js';
+import { KHRMaterialsVariants } from 'https://unpkg.com/three@0.164.1/examples/jsm/utils/KHRMaterialsVariants.js?module';
+
 
 /* ---------- layout helper ---------- */
 const topbar = document.getElementById('topbar');
@@ -680,26 +681,27 @@ async function setupVariants(gltf){
   variantRow.style.display = 'none';
   variantSelect.innerHTML = '';
 
-  // ¿El GLB trae la extensión?
-  const hasExt = !!gltf?.parser?.extensions?.KHR_materials_variants;
-  if (!hasExt) { console.warn('El GLB no declara KHR_materials_variants'); return; }
-
-  // Nombres de variantes (API estática en r0.164.1)
-  const names = KHRMaterialsVariants.getVariants(gltf);
+  // Usamos el helper ya importado de manera estática
+  const helper = new KHRMaterialsVariants(gltf);
+  const names = helper.getVariantNames();
   if (!names || !names.length) return;
 
+  variantsHelper = helper;
+
   // UI
-  names.forEach((n,i)=>{
-    const opt=document.createElement('option');
-    opt.value=n; opt.textContent=n; if(i===0) opt.selected=true;
+  names.forEach((n, i)=>{
+    const opt = document.createElement('option');
+    opt.value = n; opt.textContent = n;
+    if(i===0) opt.selected = true;
     variantSelect.appendChild(opt);
   });
   variantRow.style.display = '';
 
-  // Aplicar la primera y reaccionar a cambios
-  await KHRMaterialsVariants.selectVariant(gltf.scene, gltf, names[0]);
+  // aplicar la primera por defecto
+  await helper.selectVariant(gltf.scene, names[0]);
+
   variantSelect.onchange = async ()=>{
-    await KHRMaterialsVariants.selectVariant(gltf.scene, gltf, variantSelect.value);
+    await helper.selectVariant(gltf.scene, variantSelect.value);
   };
 }
 
