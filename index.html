@@ -30,7 +30,7 @@
     background:rgba(255,255,255,.85); backdrop-filter:blur(6px);
     border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:10px 12px; z-index:10;
     width:max-content; max-width:calc(100vw - 24px);
-    overflow:hidden; /* asegura esquinas redondeadas visibles */
+    overflow:hidden; /* mantiene las esquinas */
   }
   #topbar button{background:#1e68ff;border:none;color:white;padding:6px 10px;border-radius:6px;cursor:pointer}
   #topbar small{opacity:.7}
@@ -75,8 +75,8 @@
     background:#f5f5f5; color:#111; font:inherit;
   }
 
-  /* Panel VARIANTES (nuevo) */
-  #variantsCard{ display:none; } /* se muestra solo si hay variantes */
+  /* Panel VARIANTES */
+  #variantsCard{ display:none; } /* se muestra si hay variantes */
 
   /* Bottom stats / performance */
   #stats{
@@ -103,22 +103,32 @@
   /* ---------- Mobile tweaks ---------- */
   @media (max-width: 640px){
     #logo{height:36px}
-    #topbar{ left:8px; top:8px; padding:8px 10px; gap:6px }
 
-    #sidepanel{ right:8px; top:8px; width:340px; }
-    #animCard{ display:none !important; } /* ocultar ACCIONABLES en móvil */
+    /* Topbar centrada, recortada a ambos lados y redondeada */
+    #topbar{
+      left:50%; top:8px; transform:translateX(-50%);
+      padding:8px 10px; gap:6px;
+      max-width:calc(100vw - 16px); /* deja margen a ambos lados */
+      border-radius:12px;
+    }
 
-    /* VARIANTES: debajo de topbar, mismo ancho, bordes redondeados y compacto */
+    /* Ocultar ACCIONABLES en móvil */
+    #sidepanel{ right:auto; top:auto; } /* sin impacto, pero evita conflictos */
+    #animCard{ display:none !important; }
+
+    /* VARIANTES: debajo de topbar, mismo ancho y centrado */
     #variantsCard{
       position:fixed;
-      left:8px; top:calc(var(--topbarH) + 8px);
+      left:50%; transform:translateX(-50%);
+      top:calc(var(--topbarH) + 8px);
       width:var(--topbarW);
       max-width:calc(100vw - 16px);
       z-index:8;
       border-radius:12px;
       overflow:hidden; /* asegura esquinas */
+      display:none; /* visible sólo si hay variantes */
     }
-    /* Compactación solo en móvil */
+    /* Compacto sólo en móvil */
     #variantsCard .panel{ padding:6px 8px; }
     #variantsCard .act-row{
       grid-template-columns: 1fr 140px;
@@ -144,7 +154,7 @@
     #stats .tag{ padding:3px 6px; font-size:11px; line-height:1.15 }
     #stats #stats-reset{ padding:3px 6px; font-size:11px }
 
-    /* Ajustes de ACCIONABLES en móvil (si algún día se muestra) */
+    /* Fallback para sliders/selects genéricos si se muestran */
     .act-row{ grid-template-columns: 1fr 140px; }
     .act-row input[type="range"]{ width:140px }
     .act-row select{ width:140px; font-size:12px; padding:5px 6px; }
@@ -166,14 +176,13 @@
     <small id="msg"></small>
   </div>
 
-  <!-- Side panel: ACCIONABLES -->
+  <!-- Side panel: ACCIONABLES + VARIANTES (en escritorio) -->
   <div id="sidepanel" style="display:none">
     <details id="animCard" class="block card" open style="display:none">
       <summary>ACCIONABLES</summary>
       <div class="panel" id="animPanel"></div>
     </details>
 
-    <!-- NUEVO: VARIANTES (en escritorio se ve acá; en móvil queda fijo debajo de topbar) -->
     <details id="variantsCard" class="block card" open style="display:none">
       <summary>VARIANTES</summary>
       <div class="panel" id="variantsPanel"></div>
@@ -223,7 +232,7 @@ import { RoomEnvironment }from 'three/addons/environments/RoomEnvironment.js';
 const topbar = document.getElementById('topbar');
 function updateTopbarVar(){
   const h = topbar?.offsetHeight || 72;
-  const w = topbar?.offsetWidth || 360;
+  const w = Math.min(topbar?.offsetWidth || 360, window.innerWidth - 16);
   document.documentElement.style.setProperty('--topbarH', `${h}px`);
   document.documentElement.style.setProperty('--topbarW', `${w}px`);
 }
@@ -712,13 +721,11 @@ function removeShadowSystem(){
 
 /* ---------- Variants (KHR_materials_variants) - en panel propio ---------- */
 async function setupVariants(gltf){
-  // limpiar UI previa
   const variantsCard = document.getElementById('variantsCard');
   const vPanel = document.getElementById('variantsPanel');
   vPanel.innerHTML = '';
   variantsCard.style.display = 'none';
 
-  // leer extensión
   const parser = gltf.parser;
   const json   = parser.json;
   const rootExt = json.extensions && json.extensions.KHR_materials_variants;
@@ -835,7 +842,7 @@ function place(root, clips){
 
   statModel.textContent = `Model: ${root.name || '(scene)'}`;
   updateStats(size);
-  updateTopbarVar(); // ← actualiza ancho/alto para móvil (VARIANTES)
+  updateTopbarVar(); // asegura ancho/alto para móvil (VARIANTES)
 }
 
 /* ---------- auto-hide wall (rooms) ---------- */
@@ -896,7 +903,6 @@ canvas.addEventListener('pointerup', (e)=>{
 
   const obj = intersects[0].object;
 
-  // Prioridad: puertas animadas
   const dIdx = findDoorGroupFromObject(obj);
   if(dIdx!=null){
     const g = doorGroups[dIdx];
@@ -904,7 +910,6 @@ canvas.addEventListener('pointerup', (e)=>{
     tweenDoor(g, target, 500);
     return;
   }
-  // Morphs
   if(assetRoot){
     const gi = findMorphGroupFromObject(obj);
     if(gi!=null){
@@ -1011,12 +1016,12 @@ renderer.setAnimationLoop(()=>{
   fpsEMA = fpsEMA ? (fpsEMA*0.9 + fpsInst*0.1) : fpsInst;
 
   const info = renderer.info;
-  statFPS.textContent   = `FPS: ${fpsEMA.toFixed(0)}`;
-  statMS.textContent    = `ms: ${dt.toFixed(1)}`;
-  statCalls.textContent = `Calls: ${info.render.calls}`;
-  statGeoms.textContent = `Geoms: ${info.memory.geometries}`;
-  statText.textContent  = `Tex: ${info.memory.textures}`;
-  statRot.textContent   = `Rotate: ${controls.autoRotate ? 'On' : 'Off'}`;
+  document.getElementById('stat-fps').textContent   = `FPS: ${fpsEMA.toFixed(0)}`;
+  document.getElementById('stat-ms').textContent    = `ms: ${dt.toFixed(1)}`;
+  document.getElementById('stat-calls').textContent = `Calls: ${info.render.calls}`;
+  document.getElementById('stat-geoms').textContent = `Geoms: ${info.memory.geometries}`;
+  document.getElementById('stat-text').textContent  = `Tex: ${info.memory.textures}`;
+  document.getElementById('stat-rot').textContent   = `Rotate: ${controls.autoRotate ? 'On' : 'Off'}`;
 
   if(mixer) mixer.update(dt/1000);
 
