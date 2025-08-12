@@ -16,240 +16,121 @@
     </script>
 
     <style>
-      :root {
-        --bg: #d7d7d9;
-        --panel: #ffffffeb;
-        --border: #00000014;
-        --txt: #1a1f29;
-        --brand: #1e68ff;
-        --soft: #f6f7f8;
+      :root{
+        --bg:#d7d7d9;
+        --panel:#ffffffeb;
+        --border:#00000014;
+        --txt:#1a1f29;
+        --brand:#1e68ff;
+        --logo-size:48px; /* <-- cambiá el tamaño del logo acá */
       }
 
-      html,
-      body {
-        height: 100%;
-        margin: 0;
+      html,body{height:100%;margin:0}
+      body{
+        font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Helvetica,Arial,sans-serif;
+        background:var(--bg); color:var(--txt);
       }
-
-      body {
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu,
-          Cantarell, Helvetica, Arial, sans-serif;
-        background: var(--bg);
-        color: var(--txt);
-      }
-
-      canvas {
-        display: block;
-        width: 100%;
-        height: 100%;
-      }
+      canvas{display:block;width:100%;height:100%}
 
       /* Header -------------------------------------------------------------- */
-      #topbar {
-        position: fixed;
-        left: 12px;
-        right: 12px;
-        top: 12px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        background: var(--panel);
-        backdrop-filter: blur(6px);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 8px 12px;
-        z-index: 20;
+      #topbar{
+        position:fixed; left:12px; right:12px; top:12px;
+        display:flex; align-items:center; gap:10px;
+        background:var(--panel); backdrop-filter:blur(6px);
+        border:1px solid var(--border); border-radius:12px;
+        padding:6px 10px; z-index:20
       }
+      #brand{display:flex;align-items:center;gap:10px;margin-right:6px}
+      #brand img{width:var(--logo-size);height:var(--logo-size);display:block;object-fit:contain}
+      #fileBtn{background:var(--brand);color:#fff;border:none;border-radius:8px;padding:8px 12px;cursor:pointer}
+      #fileName{font-size:12px;opacity:.7}
+      #fileInput{display:none}
 
-      #brand {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-right: 6px;
+      /* Right panel (ACCIONABLES) ------------------------------------------ */
+      .panel{
+        position:fixed; top:calc(12px + 52px); right:12px;
+        min-width:260px; max-width:280px;
+        background:var(--panel); border:1px solid var(--border);
+        border-radius:12px; padding:10px 12px; backdrop-filter:blur(6px);
+        z-index:15
       }
-
-      #brand img {
-        width: 32px;
-        height: 32px;
-        display: block;
+      details>summary{
+        cursor:pointer; user-select:none; list-style:none;
+        border:1px solid var(--border); background:#f3f5ff; border-radius:10px;
+        padding:8px 10px; font-weight:700; margin:-2px -2px 10px -2px
       }
+      .row{display:flex;align-items:center;gap:10px;margin:8px 0}
+      .row label{flex:1}
+      input[type="range"]{width:100%}
+      .muted{opacity:.7;font-size:12px}
 
-      #fileBtn {
-        background: var(--brand);
-        color: #fff;
-        border: none;
-        border-radius: 8px;
-        padding: 8px 12px;
-        cursor: pointer;
+      /* Footer (stats + perf) ---------------------------------------------- */
+      #stats{
+        position:fixed; left:12px; right:12px; bottom:12px;
+        display:flex; gap:16px; flex-wrap:wrap; align-items:center;
+        background:var(--panel); border:1px solid var(--border);
+        border-radius:12px; padding:8px 12px; z-index:15
       }
+      #stats .k{opacity:.7}
 
-      #fileName {
-        font-size: 12px;
-        opacity: 0.7;
-      }
-
-      #fileInput {
-        display: none;
-      }
-
-      /* Right panels -------------------------------------------------------- */
-      .panel {
-        position: fixed;
-        top: 72px;
-        right: 12px;
-        min-width: 260px;
-        max-width: 280px;
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 10px 12px;
-        backdrop-filter: blur(6px);
-        z-index: 15;
-      }
-
-      details > summary {
-        cursor: pointer;
-        user-select: none;
-        list-style: none;
-        border: 1px solid var(--border);
-        background: #f3f5ff;
-        border-radius: 10px;
-        padding: 8px 10px;
-        font-weight: 700;
-        margin: -2px -2px 10px -2px;
-      }
-
-      .row {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin: 8px 0;
-      }
-
-      .row label {
-        flex: 1;
-      }
-
-      input[type='range'] {
-        width: 100%;
-      }
-
-      .muted {
-        opacity: 0.7;
-        font-size: 12px;
-      }
-
-      /* Footer stats -------------------------------------------------------- */
-      #stats {
-        position: fixed;
-        left: 12px;
-        bottom: 12px;
-        display: flex;
-        gap: 16px;
-        flex-wrap: wrap;
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 8px 12px;
-        z-index: 15;
-      }
-
-      /* Drag&Drop ----------------------------------------------------------- */
-      #drop {
-        position: fixed;
-        inset: 0;
-        display: none;
-        align-items: center;
-        justify-content: center;
-        border: 2px dashed #2a2f36;
-        border-radius: 16px;
-        background: rgba(30, 104, 255, 0.08);
-        color: #1e68ff;
-        pointer-events: none;
-        z-index: 25;
+      /* Drag & Drop --------------------------------------------------------- */
+      #drop{
+        position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+        border:2px dashed #2a2f36; border-radius:16px; background:rgba(30,104,255,.08);
+        color:#1e68ff; pointer-events:none; z-index:25
       }
 
       /* Overlay 2D (cotas) -------------------------------------------------- */
-      #overlay {
-        position: fixed;
-        inset: 0;
-        pointer-events: none;
-        z-index: 10;
-      }
+      #overlay{position:fixed; inset:0; pointer-events:none; z-index:10}
 
-      /* Mobile tweaks ------------------------------------------------------- */
-      @media (max-width: 720px) {
-        #panel-acc {
-          display: none;
-        }
-        #panel-perf {
-          transform: scale(0.85);
-          transform-origin: top right;
-        }
+      /* Mobile -------------------------------------------------------------- */
+      @media (max-width: 720px){
+        #panel-acc{display:none}
+        #stats{font-size:12px}
       }
     </style>
   </head>
-
   <body>
     <!-- Header -->
     <div id="topbar">
       <div id="brand">
-        <img src="jota3d.jpg" alt="logo" />
+        <!-- asegurate que el archivo exista como ./jota3d.jpg (sin espacios) -->
+        <img src="./jota3d.jpg" alt="logo" />
       </div>
-
       <button id="fileBtn">Open .glb/.gltf</button>
-      <input
-        type="file"
-        id="fileInput"
-        accept=".glb,.gltf,model/gltf-binary,model/gltf+json"
-      />
+      <input type="file" id="fileInput" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" />
       <span id="fileName" class="muted"></span>
     </div>
 
     <!-- Right: ACCIONABLES -->
-    <div id="panel-acc" class="panel" style="display: none">
+    <div id="panel-acc" class="panel" style="display:none;">
       <details open>
         <summary>ACCIONABLES</summary>
-
-        <div class="muted">
-          Shape keys agrupados por prefijo <code>anim_</code>. Los nombres se
-          muestran sin prefijo.
-        </div>
-
+        <div class="muted">Shape keys agrupados por prefijo <code>anim_</code>. Los nombres se muestran sin el prefijo.</div>
         <div id="skContainer"></div>
-
         <div class="row">
-          <label><input id="explodeAll" type="checkbox" /> Explotar (activar todo)</label>
+          <label><input id="explodeAll" type="checkbox"> Explotar (activar todo)</label>
         </div>
-
         <div class="row">
-          <label><input id="toggleDims" type="checkbox" /> Cotas (flechas)</label>
+          <label><input id="toggleDims" type="checkbox"> Cotas (flechas)</label>
         </div>
-
         <div class="row">
-          <label><input id="autorotate" type="checkbox" checked /> Auto-rotate</label>
+          <label><input id="autorotate" type="checkbox" checked> Auto-rotate</label>
         </div>
       </details>
     </div>
 
-    <!-- Right: PERFORMANCE -->
-    <div id="panel-perf" class="panel">
-      <details open>
-        <summary>PERFORMANCE</summary>
-
-        <div class="row"><span>FPS</span><span id="p_fps">—</span></div>
-        <div class="row"><span>ms/frame</span><span id="p_ms">—</span></div>
-        <div class="row"><span>Draw calls</span><span id="p_calls">—</span></div>
-        <div class="row"><span>Geometrías</span><span id="p_geoms">—</span></div>
-        <div class="row"><span>Texturas</span><span id="p_tex">—</span></div>
-        <div class="row"><span>Triángulos</span><span id="p_tris">—</span></div>
-        <div class="row"><span>Auto-rotate</span><span id="p_auto">On</span></div>
-        <div class="row"><button id="perfReset">Reset</button></div>
-      </details>
+    <!-- Footer: stats + performance -->
+    <div id="stats">
+      <span class="k">Tris:</span><span id="s_tris">—</span>
+      <span class="k">Size:</span><span id="s_size">—</span>
+      <span class="k">GLB:</span><span id="s_glb">—</span>
+      <span class="k">FPS:</span><span id="p_fps">—</span>
+      <span class="k">ms:</span><span id="p_ms">—</span>
+      <span class="k">Calls:</span><span id="p_calls">—</span>
+      <span class="k">Geoms:</span><span id="p_geoms">—</span>
+      <span class="k">Tex:</span><span id="p_tex">—</span>
     </div>
-
-    <!-- Footer stats -->
-    <div id="stats"></div>
 
     <!-- Drag & Drop -->
     <div id="drop">Drop a .glb/.gltf file to view</div>
@@ -272,190 +153,198 @@
        * Renderer / Scene / Camera
        * ===================================================================*/
       const webgl = document.getElementById('c');
-      const renderer = new THREE.WebGLRenderer({ canvas: webgl, antialias: true });
+      const renderer = new THREE.WebGLRenderer({ canvas:webgl, antialias:true });
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.shadowMap.enabled = true;
-      renderer.shadowMap.type = THREE.VSMShadowMap; // sombras suaves
-      renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+      renderer.shadowMap.enabled = false;  // <- SIN sombras hasta que haya modelo
+      renderer.shadowMap.type = THREE.VSMShadowMap;
+      renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 
-      const scene = new THREE.Scene();
+      const scene  = new THREE.Scene();
       scene.background = new THREE.Color(0xd7d7d9);
 
-      const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 200);
-      camera.position.set(2.8, 1.7, 2.8);
+      const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 200);
+      camera.position.set(2.8,1.7,2.8);
 
       const controls = new OrbitControls(camera, renderer.domElement);
-      controls.target.set(0, 0.6, 0);
+      controls.target.set(0,0.6,0);
       controls.enableDamping = true;
 
       /* =====================================================================
        * Luces
        * ===================================================================*/
-      scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa0a6, 0.9));
-      const amb = new THREE.AmbientLight(0xffffff, 0.25);
+      // Un poco más brillante que antes
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa0a6, 1.0));
+      const amb = new THREE.AmbientLight(0xffffff, 0.35);
       scene.add(amb);
 
-      // Direccional (sol) + plano receptor de sombras
-      const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
-      dirLight.castShadow = true;
+      const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+      dirLight.castShadow = false; // off hasta que haya modelo
       dirLight.shadow.camera.near = 0.1;
-      dirLight.shadow.camera.far = 20;
-      dirLight.shadow.mapSize.set(2048, 2048);
-      dirLight.shadow.radius = 3.0;
+      dirLight.shadow.camera.far  = 20;
+      dirLight.shadow.mapSize.set(2048,2048);
+      dirLight.shadow.radius = 4.2;
       scene.add(dirLight);
       scene.add(dirLight.target);
 
-      const shadowMat = new THREE.ShadowMaterial({ opacity: 0.28 }); // -20% opacidad
-      const ground = new THREE.Mesh(new THREE.PlaneGeometry(50, 50), shadowMat);
-      ground.rotation.x = -Math.PI / 2;
+      // Suelo receptor de sombras (invisible hasta que haya modelo)
+      const shadowMat = new THREE.ShadowMaterial({ opacity: 0.24 });
+      const ground = new THREE.Mesh(new THREE.PlaneGeometry(50,50), shadowMat);
+      ground.rotation.x = -Math.PI/2;
       ground.position.y = 0;
       ground.receiveShadow = true;
+      ground.visible = false;  // <- oculto sin modelo
       scene.add(ground);
 
       /* =====================================================================
        * Loaders
        * ===================================================================*/
-      const draco = new DRACOLoader().setDecoderPath(
-        'https://unpkg.com/three@0.164/examples/jsm/libs/draco/',
-      );
-      const ktx2 = new KTX2Loader()
-        .setTranscoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/basis/')
-        .detectSupport(renderer);
+      const draco  = new DRACOLoader().setDecoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/draco/');
+      const ktx2   = new KTX2Loader().setTranscoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/basis/').detectSupport(renderer);
       const loader = new GLTFLoader().setDRACOLoader(draco).setKTX2Loader(ktx2);
 
       /* =====================================================================
        * Estado
        * ===================================================================*/
       let current = null;
-      let isAsset = false; // si el root o filename empieza con "model_"
+      let isAsset = false;
       let autoRotate = true;
       let lastGLBBytes = null;
 
-      let skGroups = []; // shape key groups (sin prefijo anim_)
+      let skGroups = [];
       const panelAcc = document.getElementById('panel-acc');
 
       // Overlay (cotas)
       const overlay = document.getElementById('overlay');
-      const octx = overlay.getContext('2d', { alpha: true });
+      const octx = overlay.getContext('2d', { alpha:true });
 
       /* =====================================================================
-       * Utils: Resize / UI text
+       * Helpers UI / Resize / Stats
        * ===================================================================*/
-      function resize() {
-        const w = innerWidth,
-          h = innerHeight;
-        renderer.setSize(w, h, false);
-        camera.aspect = w / h;
-        camera.updateProjectionMatrix();
+      function resize(){
+        const w=innerWidth,h=innerHeight;
+        renderer.setSize(w,h,false);
+        camera.aspect=w/h; camera.updateProjectionMatrix();
 
-        overlay.width = w * devicePixelRatio;
+        overlay.width  = w * devicePixelRatio;
         overlay.height = h * devicePixelRatio;
-        overlay.style.width = w + 'px';
-        overlay.style.height = h + 'px';
-        octx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+        overlay.style.width  = w+'px';
+        overlay.style.height = h+'px';
+        octx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
       }
-      addEventListener('resize', resize);
-      resize();
+      addEventListener('resize', resize); resize();
 
-      function setFileName(t) {
-        document.getElementById('fileName').textContent = t || '';
+      function setFileName(t){ document.getElementById('fileName').textContent = t||''; }
+      function setFooter({tris,size,glb}){
+        if(tris!=null) document.getElementById('s_tris').textContent = tris;
+        if(size!=null) document.getElementById('s_size').textContent = size;
+        if(glb!=null)  document.getElementById('s_glb').textContent  = glb;
+      }
+      function humanBytes(b){
+        if(b==null) return '—';
+        const u=['B','KB','MB','GB']; let i=0; let n=b;
+        while(n>=1024 && i<u.length-1){ n/=1024; i++; }
+        return `${n.toFixed(n<10&&i>0?1:0)} ${u[i]}`;
       }
 
       /* =====================================================================
-       * Limpiar modelo
+       * Limpiar escena (y ocultar sombras)
        * ===================================================================*/
-      function clearScene() {
-        if (!current) return;
-        scene.remove(current);
-        current.traverse((o) => {
-          if (o.isMesh) {
-            o.geometry?.dispose?.();
-            const mats = Array.isArray(o.material) ? o.material : [o.material];
-            mats.forEach((m) => {
-              if (!m) return;
-              ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap'].forEach(
-                (k) => m[k]?.dispose?.(),
-              );
-            });
-          }
-        });
-        current = null;
-        skGroups = [];
-        isAsset = false;
-        panelAcc.style.display = 'none';
+      function clearScene(){
+        if(current){
+          scene.remove(current);
+          current.traverse(o=>{
+            if(o.isMesh){
+              o.geometry?.dispose?.();
+              const mats = Array.isArray(o.material)?o.material:[o.material];
+              mats.forEach(m=>{
+                if(!m) return;
+                ['map','normalMap','roughnessMap','metalnessMap','aoMap','emissiveMap'].forEach(k=>m[k]?.dispose?.());
+              });
+            }
+          });
+          current=null;
+        }
+        skGroups=[]; isAsset=false;
+        panelAcc.style.display='none';
         setFileName('');
         drawOverlayClear();
+
+        // apagar sombras/ground
+        ground.visible = false;
+        renderer.shadowMap.enabled = false;
+        dirLight.castShadow = false;
+
+        setFooter({tris:'—', size:'—', glb:'—'});
       }
 
       /* =====================================================================
-       * Colocar modelo en escena
+       * Colocar modelo
        * ===================================================================*/
-      function place(root, fileName = '') {
-        // Detectar asset por nombre raíz o por archivo
+      function place(root, fileName=''){
+        // Detectar asset por nombre raíz o archivo
         const rootName = root.children?.[0]?.name || root.name || '';
-        const fn = (fileName || '').toLowerCase();
+        const fn = (fileName||'').toLowerCase();
         isAsset = rootName.startsWith('model_') || fn.startsWith('model_');
 
-        // Centrar y apoyar al suelo
-        const box = new THREE.Box3().setFromObject(root);
-        const size = box.getSize(new THREE.Vector3());
-        const ctr = box.getCenter(new THREE.Vector3());
+        // Centrar y apoyar
+        const worldBox = new THREE.Box3().setFromObject(root);
+        const worldSize = worldBox.getSize(new THREE.Vector3());
+        const worldCtr  = worldBox.getCenter(new THREE.Vector3());
 
-        root.position.sub(ctr); // centrar
-        const box2 = new THREE.Box3().setFromObject(root);
-        root.position.y -= box2.min.y; // apoyar
+        root.position.sub(worldCtr);
+        const after = new THREE.Box3().setFromObject(root);
+        root.position.y -= after.min.y;
 
-        // Sombreado
-        root.traverse((o) => {
-          if (o.isMesh) {
+        // Material defaults + caster
+        root.traverse(o=>{
+          if(o.isMesh){
             o.castShadow = true;
             o.receiveShadow = false;
-            if (o.material && o.material.roughness === undefined) o.material.roughness = 0.6;
-            if (o.material && o.material.metalness === undefined) o.material.metalness = 0.0;
+            if(o.material && o.material.roughness===undefined) o.material.roughness = 0.6;
+            if(o.material && o.material.metalness===undefined) o.material.metalness = 0.0;
           }
         });
 
-        // Luz direccional casi cenital, 15° hacia atrás/izq, suave
-        const s = Math.max(size.x, size.y, size.z);
-        const h = box2.max.y + size.y * 2.0;
-        const offset = s * 0.15;
-        dirLight.position.set(box2.min.x - offset, h, box2.max.z + offset);
-        dirLight.target.position.set(0, 0, 0);
-        dirLight.shadow.radius = 4.2;
+        // Luz direccional casi cenital con leve sesgo
+        const s = Math.max(worldSize.x, worldSize.y, worldSize.z);
+        const h = after.max.y + worldSize.y*2.0;
+        const offset = s*0.15;
+        dirLight.position.set(after.min.x - offset, h, after.max.z + offset);
+        dirLight.target.position.set(0,0,0);
 
         // Cámara
-        const r = Math.max(size.x, size.y, size.z) * 1.8;
-        camera.position.set(r, r * 0.6, r);
-        controls.target.set(0, size.y * 0.5, 0);
+        const r = Math.max(worldSize.x,worldSize.y,worldSize.z)*1.8;
+        camera.position.set(r, r*0.6, r);
+        controls.target.set(0, worldSize.y*0.5, 0);
         controls.update();
 
-        // Panel de accionables sólo para assets
-        if (isAsset) {
-          panelAcc.style.display = '';
-          buildShapeKeyUI(root);
-        } else {
-          panelAcc.style.display = 'none';
-        }
+        // Activar sombras y suelo ahora que hay modelo
+        renderer.shadowMap.enabled = true;
+        dirLight.castShadow = true;
+        ground.visible = true;
 
-        // Stats (footer)
+        // Panel accionables sólo assets
+        if(isAsset){ panelAcc.style.display=''; buildShapeKeyUI(root); }
+        else{ panelAcc.style.display='none'; }
+
+        // Footer stats
         const tris = triCount(root).toLocaleString();
-        const dims = `${size.x.toFixed(2)}×${size.y.toFixed(2)}×${size.z.toFixed(2)} m`;
-        document.getElementById('stats').textContent = `Tris: ${tris} | Size: ${dims}`;
+        const dims = `${worldSize.x.toFixed(2)}×${worldSize.y.toFixed(2)}×${worldSize.z.toFixed(2)} m`;
+        setFooter({tris, size:dims, glb:humanBytes(lastGLBBytes)});
 
-        current = root;
-        scene.add(root);
+        current = root; scene.add(root);
 
-        // Cotas (si toggle activo)
+        // Cotas
         drawOverlayMaybe();
       }
 
-      function triCount(obj) {
-        let t = 0;
-        obj.traverse((o) => {
-          if (o.isMesh) {
-            const g = o.geometry;
-            t += g?.index ? g.index.count / 3 : (g?.attributes?.position?.count || 0) / 3;
+      function triCount(obj){
+        let t=0;
+        obj.traverse(o=>{
+          if(o.isMesh){
+            const g=o.geometry;
+            t += g?.index ? g.index.count/3 : (g?.attributes?.position?.count||0)/3;
           }
         });
         return Math.round(t);
@@ -464,363 +353,292 @@
       /* =====================================================================
        * Carga GLTF
        * ===================================================================*/
-      function loadBlob(file) {
+      function loadBlob(file){
         clearScene();
         lastGLBBytes = file.size;
         setFileName(file.name);
+        setFooter({glb:humanBytes(file.size)});
+
         const url = URL.createObjectURL(file);
-        loader.load(
-          url,
-          (g) => {
-            place(g.scene, file.name);
-            URL.revokeObjectURL(url);
-          },
-          undefined,
-          (e) => {
-            console.error(e);
-            setFileName('Error loading');
-            URL.revokeObjectURL(url);
-          },
-        );
+        loader.load(url, g=>{
+          place(g.scene, file.name);
+          URL.revokeObjectURL(url);
+        }, undefined, e=>{
+          console.error(e);
+          setFileName('Error loading');
+          URL.revokeObjectURL(url);
+        });
       }
 
       /* =====================================================================
-       * Shape Keys UI (prefijo anim_, nombre limpio en UI)
+       * Shape Keys UI (prefijo anim_)
        * ===================================================================*/
-      function buildShapeKeyUI(root) {
+      function buildShapeKeyUI(root){
         const container = document.getElementById('skContainer');
         container.innerHTML = '';
 
         const map = new Map(); // cleanName -> [{mesh,index}]
-        root.traverse((o) => {
-          if (!o.isMesh || !o.morphTargetDictionary || !o.morphTargetInfluences) return;
+        root.traverse(o=>{
+          if(!o.isMesh || !o.morphTargetDictionary || !o.morphTargetInfluences) return;
           const dict = o.morphTargetDictionary;
-          Object.entries(dict).forEach(([name, idx]) => {
-            if (!name.toLowerCase().startsWith('anim_')) return;
-            const clean = name.replace(/^anim_/i, '');
-            if (!map.has(clean)) map.set(clean, []);
-            map.get(clean).push({ mesh: o, index: idx });
+          Object.entries(dict).forEach(([name,idx])=>{
+            if(!/^anim_/i.test(name)) return;
+            const clean = name.replace(/^anim_/i,'');
+            if(!map.has(clean)) map.set(clean, []);
+            map.get(clean).push({ mesh:o, index:idx });
           });
         });
 
-        skGroups = Array.from(map.entries()).map(([clean, items]) => ({
-          name: clean,
-          items,
-          value: 0,
-        }));
+        skGroups = Array.from(map.entries()).map(([clean, items])=>({ name:clean, items, value:0 }));
 
-        if (!skGroups.length) {
-          container.innerHTML =
-            '<div class="muted">No se detectaron shape keys (anim_*)</div>';
+        if(!skGroups.length){
+          container.innerHTML = '<div class="muted">No se detectaron shape keys (anim_*)</div>';
           return;
         }
 
-        skGroups.forEach((g) => {
-          const row = document.createElement('div');
-          row.className = 'row';
-
-          const label = document.createElement('label');
-          label.textContent = g.name;
-
-          const slider = document.createElement('input');
-          slider.type = 'range';
-          slider.min = 0;
-          slider.max = 1;
-          slider.step = 0.001;
-          slider.value = 0;
-          slider.oninput = () => {
-            g.value = parseFloat(slider.value);
-            g.items.forEach((it) => (it.mesh.morphTargetInfluences[it.index] = g.value));
+        skGroups.forEach(g=>{
+          const row = document.createElement('div'); row.className='row';
+          const label = document.createElement('label'); label.textContent = g.name;
+          const slider = document.createElement('input'); slider.type='range';
+          slider.min=0; slider.max=1; slider.step=0.001; slider.value=0;
+          slider.oninput = ()=>{
+            g.value=parseFloat(slider.value);
+            g.items.forEach(it=> it.mesh.morphTargetInfluences[it.index]=g.value);
           };
-
-          row.appendChild(label);
-          row.appendChild(slider);
+          row.appendChild(label); row.appendChild(slider);
           container.appendChild(row);
         });
       }
 
-      // Explotar (activar/desactivar todos)
-      document.getElementById('explodeAll').onchange = (e) => {
+      // Explotar (activar todo)
+      document.getElementById('explodeAll').onchange = (e)=>{
         const v = e.target.checked ? 1 : 0;
-        skGroups.forEach((g) => {
+        skGroups.forEach(g=>{
           g.value = v;
-          g.items.forEach((it) => (it.mesh.morphTargetInfluences[it.index] = v));
+          g.items.forEach(it=> it.mesh.morphTargetInfluences[it.index]=v);
         });
-        // sync sliders
-        document
-          .querySelectorAll('#skContainer input[type="range"]')
-          .forEach((r) => (r.value = v));
+        document.querySelectorAll('#skContainer input[type="range"]').forEach(r=> r.value=v);
       };
 
       /* =====================================================================
        * Autorotate
        * ===================================================================*/
       const autorotateCB = document.getElementById('autorotate');
-      autorotateCB.onchange = () => {
+      autorotateCB.onchange = ()=>{
         autoRotate = autorotateCB.checked;
-        document.getElementById('p_auto').textContent = autoRotate ? 'On' : 'Off';
       };
 
       /* =====================================================================
-       * Overlay de COTAS (flechas 2D sobre WebGL)
+       * Overlay de COTAS (con OBB local)
        * ===================================================================*/
       const toggleDims = document.getElementById('toggleDims');
-      toggleDims.onchange = () => drawOverlayMaybe();
-      controls.addEventListener('change', () => drawOverlayMaybe());
+      toggleDims.onchange = ()=> drawOverlayMaybe();
+      controls.addEventListener('change', ()=> drawOverlayMaybe());
 
-      function drawOverlayMaybe() {
-        if (!current || !isAsset || !toggleDims.checked) {
-          drawOverlayClear();
-          return;
-        }
-        drawOverlayCotas(current);
+      function drawOverlayMaybe(){
+        if(!current || !isAsset || !toggleDims.checked){ drawOverlayClear(); return; }
+        drawOverlayCotasOBB(current);
       }
+      function drawOverlayClear(){ octx.clearRect(0,0,overlay.width,overlay.height); }
 
-      function drawOverlayClear() {
-        octx.clearRect(0, 0, overlay.width, overlay.height);
-      }
-
-      function toScreen(vec3) {
+      function toScreen(vec3){
         const p = vec3.clone().project(camera);
-        const x = (p.x * 0.5 + 0.5) * (overlay.width / devicePixelRatio);
-        const y = (1 - (p.y * 0.5 + 0.5)) * (overlay.height / devicePixelRatio);
-        return new THREE.Vector2(x, y);
+        const x = (p.x*0.5+0.5) * (overlay.width / devicePixelRatio);
+        const y = (1-(p.y*0.5+0.5)) * (overlay.height / devicePixelRatio);
+        return new THREE.Vector2(x,y);
       }
 
-      // Etiqueta tipo "píldora"
-      function pill(x, y, text) {
+      function pill(x,y,text){
         octx.font = '13px system-ui, -apple-system, Segoe UI, Roboto';
-        const padX = 10,
-          h = 24,
-          r = 12;
-        const w = octx.measureText(text).width + padX * 2;
-        const bx = x - w / 2,
-          by = y - h / 2;
+        const padX=10, h=24, r=12;
+        const w = octx.measureText(text).width + padX*2;
+        const bx = x - w/2, by = y - h/2;
 
         octx.fillStyle = '#fff';
         octx.strokeStyle = '#1e68ff';
         octx.lineWidth = 2;
 
         octx.beginPath();
-        octx.moveTo(bx + r, by);
-        octx.lineTo(bx + w - r, by);
-        octx.quadraticCurveTo(bx + w, by, bx + w, by + r);
-        octx.lineTo(bx + w, by + h - r);
-        octx.quadraticCurveTo(bx + w, by + h, bx + w - r, by + h);
-        octx.lineTo(bx + r, by + h);
-        octx.quadraticCurveTo(bx, by + h, bx, by + h - r);
-        octx.lineTo(bx, by + r);
-        octx.quadraticCurveTo(bx, by, bx + r, by);
+        octx.moveTo(bx+r,by);
+        octx.lineTo(bx+w-r,by);
+        octx.quadraticCurveTo(bx+w,by,bx+w,by+r);
+        octx.lineTo(bx+w,by+h-r);
+        octx.quadraticCurveTo(bx+w,by+h,bx+w-r,by+h);
+        octx.lineTo(bx+r,by+h);
+        octx.quadraticCurveTo(bx,by+h,bx,by+h-r);
+        octx.lineTo(bx,by+r);
+        octx.quadraticCurveTo(bx,by,bx+r,by);
         octx.closePath();
-        octx.fill();
-        octx.stroke();
+        octx.fill(); octx.stroke();
 
         octx.fillStyle = '#1e68ff';
-        octx.fillText(text, bx + padX, by + h / 2 + 4);
+        octx.fillText(text, bx+padX, by+h/2+4);
       }
 
-      // Flecha con puntas en ambos extremos
-      function arrow(a, b, text = '') {
-        const v = new THREE.Vector2().subVectors(b, a);
-        const len = v.length();
-        if (len < 1) return;
+      function arrow(a,b,text=''){
+        const v = new THREE.Vector2().subVectors(b,a);
+        if(v.length()<1) return;
 
-        // Línea principal
         octx.strokeStyle = 'rgba(30,104,255,.8)';
         octx.lineWidth = 2;
-        octx.beginPath();
-        octx.moveTo(a.x, a.y);
-        octx.lineTo(b.x, b.y);
-        octx.stroke();
+        octx.beginPath(); octx.moveTo(a.x,a.y); octx.lineTo(b.x,b.y); octx.stroke();
 
-        // Puntas
-        const head = 10,
-          ang = Math.atan2(v.y, v.x);
-        function headAt(x, y, ang) {
+        const head=10, ang = Math.atan2(v.y,v.x);
+        function headAt(x,y,ang){
           octx.beginPath();
-          octx.moveTo(x, y);
-          octx.lineTo(
-            x - head * Math.cos(ang - Math.PI / 6),
-            y - head * Math.sin(ang - Math.PI / 6),
-          );
-          octx.moveTo(x, y);
-          octx.lineTo(
-            x - head * Math.cos(ang + Math.PI / 6),
-            y - head * Math.sin(ang + Math.PI / 6),
-          );
+          octx.moveTo(x,y);
+          octx.lineTo(x - head*Math.cos(ang-Math.PI/6), y - head*Math.sin(ang-Math.PI/6));
+          octx.moveTo(x,y);
+          octx.lineTo(x - head*Math.cos(ang+Math.PI/6), y - head*Math.sin(ang+Math.PI/6));
           octx.stroke();
         }
-        headAt(a.x, a.y, ang + Math.PI);
-        headAt(b.x, b.y, ang);
+        headAt(a.x,a.y, ang+Math.PI);
+        headAt(b.x,b.y, ang);
 
-        if (text) {
-          const mid = new THREE.Vector2().addVectors(a, b).multiplyScalar(0.5);
-          pill(mid.x, mid.y - 16, text);
+        if(text){
+          const mid = new THREE.Vector2().addVectors(a,b).multiplyScalar(0.5);
+          pill(mid.x, mid.y-16, text);
         }
       }
 
-      function drawOverlayCotas(root) {
+      // Calcula bounds en el espacio LOCAL del root (OBB), usando inv(root.matrixWorld)
+      function computeLocalBounds(root){
+        root.updateMatrixWorld(true);
+        const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
+        const min = new THREE.Vector3(+Infinity,+Infinity,+Infinity);
+        const max = new THREE.Vector3(-Infinity,-Infinity,-Infinity);
+
+        root.traverse(o=>{
+          if(!o.isMesh || !o.geometry) return;
+          const g = o.geometry;
+          if(!g.boundingBox) g.computeBoundingBox();
+          const bb = g.boundingBox.clone();
+
+          // transformar a world y luego a root-local
+          const mat = new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld);
+          bb.applyMatrix4(mat);
+
+          min.min(bb.min);
+          max.max(bb.max);
+        });
+
+        if(!isFinite(min.x)) return null;
+        return { min, max, size: new THREE.Vector3().subVectors(max,min) };
+      }
+
+      function drawOverlayCotasOBB(root){
         drawOverlayClear();
+        const obb = computeLocalBounds(root);
+        if(!obb) return;
 
-        const box = new THREE.Box3().setFromObject(root);
-        const min = box.min,
-          max = box.max;
-        const size = box.getSize(new THREE.Vector3());
+        const {min,max,size} = obb;
 
-        // Asumimos glTF ≈ 1 unidad = 1 m
+        // Puntos locales (ejes del root)
+        const pX0 = new THREE.Vector3(min.x, min.y, max.z);
+        const pX1 = new THREE.Vector3(max.x, min.y, max.z);
+
+        const pY0 = new THREE.Vector3(min.x, min.y, min.z);
+        const pY1 = new THREE.Vector3(min.x, max.y, min.z);
+
+        const pZ0 = new THREE.Vector3(min.x, min.y, min.z);
+        const pZ1 = new THREE.Vector3(min.x, min.y, max.z);
+
+        // Pasar a WORLD y luego a pantalla
+        const m = root.matrixWorld;
+        const aW = toScreen(pX0.clone().applyMatrix4(m));
+        const bW = toScreen(pX1.clone().applyMatrix4(m));
+
+        const aH = toScreen(pY0.clone().applyMatrix4(m));
+        const bH = toScreen(pY1.clone().applyMatrix4(m));
+
+        const aD = toScreen(pZ0.clone().applyMatrix4(m));
+        const bD = toScreen(pZ1.clone().applyMatrix4(m));
+
         const M2CM = 100;
         const W = Math.round(size.x * M2CM) + ' cm';
         const H = Math.round(size.y * M2CM) + ' cm';
         const D = Math.round(size.z * M2CM) + ' cm';
 
-        // Aristas “limpias”
-        const yTop = new THREE.Vector3(min.x, max.y, min.z);
-        const yBot = new THREE.Vector3(min.x, min.y, min.z);
-
-        const xL = new THREE.Vector3(min.x, min.y, max.z);
-        const xR = new THREE.Vector3(max.x, min.y, max.z);
-
-        const zN = new THREE.Vector3(min.x, min.y, min.z);
-        const zF = new THREE.Vector3(min.x, min.y, max.z);
-
-        const aH = toScreen(yBot),
-          bH = toScreen(yTop); // altura
-        const aW = toScreen(xL),
-          bW = toScreen(xR); // ancho
-        const aD = toScreen(zN),
-          bD = toScreen(zF); // profundidad
-
-        arrow(aW, bW, W);
-        arrow(aH, bH, H);
-        arrow(aD, bD, D);
+        arrow(aW,bW,W);
+        arrow(aH,bH,H);
+        arrow(aD,bD,D);
       }
 
       /* =====================================================================
-       * Performance panel
+       * Performance to footer
        * ===================================================================*/
-      let frames = 0,
-        lastT = performance.now(),
-        fps = 0,
-        accum = 0;
-      function perfUpdate() {
-        const now = performance.now();
-        frames++;
-        const dt = now - lastT;
-        lastT = now;
+      let lastT=performance.now(), accum=0;
+      function perfUpdate(){
+        const now=performance.now();
+        const dt=now-lastT; lastT=now;
         accum += dt;
-
-        if (accum > 500) {
-          fps = Math.round(1000 / (dt || 1));
+        if(accum>500){
+          const fps = Math.round(1000/(dt||1));
           document.getElementById('p_fps').textContent = fps;
-          document.getElementById('p_ms').textContent = dt.toFixed(1);
-
+          document.getElementById('p_ms').textContent  = dt.toFixed(1);
           const info = renderer.info;
           document.getElementById('p_calls').textContent = info.render.calls;
           document.getElementById('p_geoms').textContent = info.memory.geometries;
-          document.getElementById('p_tex').textContent = info.memory.textures;
-          document.getElementById('p_tris').textContent =
-            info.render.triangles.toLocaleString();
-
-          accum = 0;
+          document.getElementById('p_tex').textContent   = info.memory.textures;
+          accum=0;
         }
       }
-      document.getElementById('perfReset').onclick = () => renderer.info.reset();
 
       /* =====================================================================
        * UI: Open & Drag/Drop
        * ===================================================================*/
-      const fileBtn = document.getElementById('fileBtn');
+      const fileBtn   = document.getElementById('fileBtn');
       const fileInput = document.getElementById('fileInput');
+      fileBtn.onclick = ()=>{ fileInput.value=''; fileInput.click(); };
+      fileInput.onchange = ()=>{ const f=fileInput.files?.[0]; if(f) loadBlob(f); };
 
-      fileBtn.onclick = () => {
-        fileInput.value = '';
-        fileInput.click();
-      };
-
-      fileInput.onchange = () => {
-        const f = fileInput.files?.[0];
-        if (f) loadBlob(f);
-      };
-
-      const drop = document.getElementById('drop');
-
-      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach((ev) => {
-        window.addEventListener(
-          ev,
-          (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          },
-          false,
-        );
+      const drop=document.getElementById('drop');
+      ['dragenter','dragover','dragleave','drop'].forEach(ev=>{
+        window.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); }, false);
       });
-
-      window.addEventListener('dragenter', () => {
-        drop.style.display = 'flex';
-        drop.style.pointerEvents = 'auto';
-      });
-
-      window.addEventListener('dragover', () => {
-        drop.style.display = 'flex';
-      });
-
-      window.addEventListener('dragleave', (e) => {
-        if (
-          e.clientX <= 0 ||
-          e.clientY <= 0 ||
-          e.clientX >= innerWidth ||
-          e.clientY >= innerHeight
-        ) {
-          drop.style.display = 'none';
-          drop.style.pointerEvents = 'none';
+      window.addEventListener('dragenter', ()=>{ drop.style.display='flex'; drop.style.pointerEvents='auto'; });
+      window.addEventListener('dragover',  ()=>{ drop.style.display='flex'; });
+      window.addEventListener('dragleave', e=>{
+        if(e.clientX<=0||e.clientY<=0||e.clientX>=innerWidth||e.clientY>=innerHeight){
+          drop.style.display='none'; drop.style.pointerEvents='none';
         }
       });
-
-      function handleDrop(e) {
-        drop.style.display = 'none';
-        drop.style.pointerEvents = 'none';
-        const f = e.dataTransfer?.files?.[0];
-        if (f) loadBlob(f);
+      function handleDrop(e){
+        drop.style.display='none'; drop.style.pointerEvents='none';
+        const f=e.dataTransfer?.files?.[0]; if(f) loadBlob(f);
       }
       drop.addEventListener('drop', handleDrop);
 
       /* =====================================================================
-       * Click: activar primer shape key anim_* del mesh (toggle 0↔1 con tween)
+       * Click-to-morph (toggle 0↔1 con tween 0.5s) sobre primer anim_* del mesh
        * ===================================================================*/
-      renderer.domElement.addEventListener('pointerdown', (e) => {
-        if (!isAsset || !current) return;
-
+      renderer.domElement.addEventListener('pointerdown', (e)=>{
+        if(!isAsset || !current) return;
         const rect = renderer.domElement.getBoundingClientRect();
         const ndc = new THREE.Vector2(
-          ((e.clientX - rect.left) / rect.width) * 2 - 1,
-          -((e.clientY - rect.top) / rect.height) * 2 + 1,
+          ((e.clientX-rect.left)/rect.width)*2 - 1,
+          -((e.clientY-rect.top)/rect.height)*2 + 1
         );
-
         const ray = new THREE.Raycaster();
         ray.setFromCamera(ndc, camera);
-
         const hits = ray.intersectObject(current, true);
-        if (!hits.length) return;
-
+        if(!hits.length) return;
         const mesh = hits[0].object;
-        if (!mesh.isMesh || !mesh.morphTargetDictionary) return;
+        if(!mesh.isMesh || !mesh.morphTargetDictionary) return;
 
-        const dict = mesh.morphTargetDictionary;
-        const entries = Object.entries(dict).filter(([n]) => /^anim_/i.test(n));
-        if (!entries.length) return;
-
+        const entries = Object.entries(mesh.morphTargetDictionary).filter(([n])=>/^anim_/i.test(n));
+        if(!entries.length) return;
         const [, idx] = entries[0];
-        const start = mesh.morphTargetInfluences[idx] || 0;
-        const end = start < 0.5 ? 1 : 0;
+        const start = mesh.morphTargetInfluences[idx]||0;
+        const end   = start<0.5 ? 1 : 0;
 
-        const T = 500;
-        const t0 = performance.now();
-        function tick() {
-          const t = (performance.now() - t0) / T;
-          const k = Math.min(1, t);
-          const v = start + (end - start) * (0.5 - 0.5 * Math.cos(Math.PI * k)); // ease
-          mesh.morphTargetInfluences[idx] = v;
-          if (k < 1) requestAnimationFrame(tick);
+        const T = 500, t0 = performance.now();
+        function tick(){
+          const t = (performance.now()-t0)/T;
+          const k = Math.min(1,t);
+          const v = start + (end-start)*(0.5-0.5*Math.cos(Math.PI*k));
+          mesh.morphTargetInfluences[idx]=v;
+          if(k<1) requestAnimationFrame(tick);
         }
         requestAnimationFrame(tick);
       });
@@ -828,14 +646,14 @@
       /* =====================================================================
        * Render loop
        * ===================================================================*/
-      renderer.setAnimationLoop(() => {
-        if (autoRotate) current?.rotateY(0.003);
+      renderer.setAnimationLoop(()=>{
+        if(autoRotate) current?.rotateY(0.003);
         controls.update();
-        renderer.render(scene, camera);
+        renderer.render(scene,camera);
         perfUpdate();
 
         // Redibujar cotas si están activas (rotación/anim)
-        if (isAsset && toggleDims.checked) drawOverlayMaybe();
+        if(isAsset && document.getElementById('toggleDims').checked) drawOverlayMaybe();
       });
     </script>
   </body>
