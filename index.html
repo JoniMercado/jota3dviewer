@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Room Viewer — v0.2.1</title>
+<title>Room Viewer — v0.2.2</title>
 
 <script type="importmap">
 {
@@ -39,15 +39,15 @@
 
   /* Right side panel (ACCIONABLES) */
   #sidepanel{
-    position:fixed; right:12px; top:calc(var(--topbarH) + 12px);
-    width:300px; max-height:calc(100% - var(--topbarH) - 24px);
+    position:fixed; right:12px; top:12px; /* alineado al header */
+    width:300px; max-height:calc(100% - 24px);
     display:flex; flex-direction:column; gap:8px; overflow:auto; z-index:9
   }
   .card{
     background:rgba(255,255,255,.9); backdrop-filter:blur(6px);
     border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:10px 12px
   }
-  /* summary con estética de la topbar (cuando está replegado) */
+  /* summary con estética de la topbar */
   details.block>summary{
     list-style:none; cursor:pointer;
     display:flex; align-items:center; gap:8px;
@@ -78,8 +78,11 @@
   /* Toggle móvil (pill “Performance”) */
   #statsToggle{
     display:none;
-    background:#1e68ff; color:#fff; border:none; border-radius:999px;
-    padding:6px 12px; font-weight:600; cursor:pointer;
+    background:transparent; color:#444; border:1px solid #cfd6e0;
+    border-radius:999px; padding:6px 12px; font-weight:600; cursor:pointer;
+  }
+  #stats.open #statsToggle{
+    background:#2b7aff; color:#fff; border-color:transparent;
   }
   #statsContent{ display:flex; flex-wrap:wrap; align-items:center; gap:10px }
 
@@ -94,28 +97,25 @@
       padding:8px 10px; gap:6px
     }
 
-    #sidepanel{ right:8px; top:calc(var(--topbarH) + 8px); width:300px; }
+    #sidepanel{ right:8px; top:8px; width:300px; }
     #animCard{ display:none !important; } /* ocultar ACCIONABLES en móvil */
 
-    /* Barra inferior: pill por defecto; contenido en 2 líneas compactas */
+    /* Barra inferior: ancho completo; pill por defecto; contenido en 2 líneas compactas */
     #stats{
-      transform-origin: bottom left;
-      transform: scale(0.7);
-      padding:6px 10px;
+      left:0; right:0; bottom:0;
+      border-radius:0;
+      padding:8px 10px;
       gap:8px;
     }
     #statsToggle{ display:inline-flex; align-items:center; }
     #statsContent{ display:none; }
 
-    /* Cuando está “open” en móvil mostramos el contenido */
+    /* Cuando está “open” en móvil mostramos el contenido en dos filas */
     #stats.open #statsContent{
       display:grid;
       grid-template-columns: repeat(4, auto);
       column-gap:6px; row-gap:4px;
       align-items:center;
-    }
-    #stats.open #statsToggle{
-      background:#2b7aff;
     }
 
     /* Tags más compactas para que entren en dos líneas */
@@ -184,7 +184,7 @@ import { KTX2Loader }     from 'three/addons/loaders/KTX2Loader.js';
 import { OrbitControls }  from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment }from 'three/addons/environments/RoomEnvironment.js';
 
-/* ---------- layout helper: keep sidepanel below header ---------- */
+/* ---------- layout helper ---------- */
 const topbar = document.getElementById('topbar');
 function updateTopbarVar(){
   const h = topbar?.offsetHeight || 72;
@@ -827,7 +827,7 @@ function applyStatsMode(){
     statsEl.classList.remove('open');
     statsToggle.setAttribute('aria-expanded','false');
   }else{
-    statsEl.classList.add('open'); // fuerza visible en desktop
+    statsEl.classList.add('open'); // visible en desktop
     statsToggle.setAttribute('aria-expanded','true');
   }
 }
