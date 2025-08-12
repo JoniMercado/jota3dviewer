@@ -3,9 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Room Viewer — v0.2.6</title>
+<title>Room Viewer — v0.2.5</title>
 
-<!-- Import map -->
 <script type="importmap">
 {
   "imports": {
@@ -59,7 +58,7 @@
   details.block[open]>summary{background:#f3f6ff;border-color:#ccd9ff}
   .panel{padding:8px 10px}
 
-  /* ACCIONABLES / VARIANTES rows */
+  /* ACCIONABLES list */
   .act-row{
     display:grid; grid-template-columns: 1fr 200px;
     align-items:center; gap:10px; margin:8px 0;
@@ -68,7 +67,7 @@
   .act-row input[type="range"]{ width:200px }
   .muted{opacity:.7;font-size:12px}
 
-  /* Select estilo “accionable” (idéntico para VARIANTES) */
+  /* Select estilo “accionable” */
   .act-row select{
     width:200px; padding:6px 8px;
     border:1px solid #ccc; border-radius:6px;
@@ -102,15 +101,9 @@
     #logo{height:36px}
     #topbar{ left:8px; top:8px; padding:8px 10px; gap:6px }
 
-    /* El panel en móvil se coloca DEBAJO de la topbar */
-    #sidepanel{
-      right:8px;
-      top:calc(var(--topbarH) + 8px);
-      width:calc(100vw - 16px); /* full width con márgenes */
-      max-width:none;
-    }
+    #sidepanel{ right:8px; top:8px; width:340px; }
 
-    /* Ocultar ACCIONABLES en móvil, mostrar VARIANTES */
+    /* Ocultar ACCIONABLES en móvil, mantener VARIANTES */
     #animCard{ display:none !important; }
     #variantCard{ display:block; }
 
@@ -128,7 +121,7 @@
     #stats .tag{ padding:3px 6px; font-size:11px; line-height:1.15 }
     #stats #stats-reset{ padding:3px 6px; font-size:11px }
 
-    /* Ajustes de filas para no superponer */
+    /* Ajustes de filas en móvil */
     .act-row{ grid-template-columns: 1fr 140px; }
     .act-row input[type="range"]{ width:140px }
     .act-row select{ width:140px; font-size:12px; padding:5px 6px; }
@@ -150,15 +143,13 @@
     <small id="msg"></small>
   </div>
 
-  <!-- Side panel: ACCIONABLES + VARIANTES -->
+  <!-- Side panel -->
   <div id="sidepanel" style="display:none">
-    <!-- ACCIONABLES -->
     <details id="animCard" class="block card" open style="display:none">
       <summary>ACCIONABLES</summary>
       <div class="panel" id="animPanel"></div>
     </details>
 
-    <!-- VARIANTES -->
     <details id="variantCard" class="block card" open style="display:none">
       <summary>VARIANTES</summary>
       <div class="panel" id="variantPanel"></div>
@@ -186,7 +177,7 @@
   <div id="drop">Drop a .glb / .gltf file to view</div>
   <canvas id="c"></canvas>
 
-  <!-- Password Gate (overlay) -->
+  <!-- Password Gate -->
   <div id="gate" style="position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:2000;">
     <div style="background:#fff;padding:20px 16px;border-radius:14px;min-width:280px;box-shadow:0 10px 30px rgba(0,0,0,.2);display:grid;gap:10px">
       <div style="font-weight:700">Ingresar</div>
@@ -196,608 +187,825 @@
     </div>
   </div>
 
-  <!-- GATE: script NO-módulo -->
-  <script>
-  (function(){
-    var PASS = 'demo';
-    var gate = document.getElementById('gate');
-    var btn  = document.getElementById('gateBtn');
-    var inp  = document.getElementById('gateInput');
-    var msg  = document.getElementById('gateMsg');
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader }     from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader }    from 'three/addons/loaders/DRACOLoader.js';
+import { KTX2Loader }     from 'three/addons/loaders/KTX2Loader.js';
+import { OrbitControls }  from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment }from 'three/addons/environments/RoomEnvironment.js';
 
-    function unlock(){
-      if (gate) gate.style.display = 'none';
-      try { localStorage.setItem('viewer_ok','1'); } catch(e) {}
-    }
-    if (location.hostname === 'localhost' || location.protocol === 'file:') {
-      unlock(); return;
-    }
-    var ok = false;
-    try {
-      var urlKey = new URLSearchParams(location.search).get('key');
-      ok = (urlKey === PASS) || (localStorage.getItem('viewer_ok') === '1');
-    } catch(e) {}
-    if (ok) { unlock(); return; }
-    btn && btn.addEventListener('click', function(){
-      if (inp && inp.value === PASS) unlock();
-      else if (msg) msg.textContent = 'Password incorrecta';
+/* ---------- layout helper ---------- */
+const topbar = document.getElementById('topbar');
+function updateTopbarVar(){
+  const h = topbar?.offsetHeight || 72;
+  document.documentElement.style.setProperty('--topbarH', `${h}px`);
+}
+new ResizeObserver(updateTopbarVar).observe(topbar);
+addEventListener('load', updateTopbarVar);
+addEventListener('resize', updateTopbarVar);
+
+/* ---------- password gate ---------- */
+const VIEWER_PASSWORD = 'demo';
+const gate   = document.getElementById('gate');
+const gInput = document.getElementById('gateInput');
+const gBtn   = document.getElementById('gateBtn');
+const gMsg   = document.getElementById('gateMsg');
+function passOK(p){
+  const urlKey = new URLSearchParams(location.search).get('key');
+  return (p && p === VIEWER_PASSWORD) || (urlKey && urlKey === VIEWER_PASSWORD);
+}
+function unlock(){ gate.style.display = 'none'; localStorage.setItem('viewer_ok','1'); }
+(function initGate(){
+  if(localStorage.getItem('viewer_ok') === '1' || passOK(null)){ unlock(); }
+  else{
+    gBtn?.addEventListener('click', ()=>{ if(passOK(gInput.value)) unlock(); else gMsg.textContent='Password incorrecta'; });
+    gInput?.addEventListener('keydown', (e)=>{ if(e.key==='Enter') gBtn.click(); });
+  }
+})();
+
+/* ---------- renderer / scene / camera ---------- */
+const canvas   = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping      = THREE.ACESFilmicToneMapping;
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type    = THREE.VSMShadowMap;
+
+const scene  = new THREE.Scene();
+scene.background = new THREE.Color(0xc9c9c9);
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 100);
+camera.position.set(2,1.2,2);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0,0.6,0);
+controls.enableDamping = true;
+controls.autoRotate = false;
+controls.autoRotateSpeed = 0.8;
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 1.0));
+scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+
+/* Luz direccional para sombras (modo asset) */
+let dirLight = null;
+
+/* ---------- loaders ---------- */
+const draco  = new DRACOLoader().setDecoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/draco/');
+const ktx2   = new KTX2Loader().setTranscoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/basis/').detectSupport(renderer);
+const loader = new GLTFLoader().setDRACOLoader(draco).setKTX2Loader(ktx2);
+
+/* ---------- state ---------- */
+let current = null;
+let mixer   = null;
+let allNodes = [], doorPanels = [], doorVariantPairs = [], ceilings = [], wallRoots = [];
+let lastHiddenWalls = new Set();
+let assetRoot = null;
+let animGroups = [];             // morph groups
+let doorGroups = [];             // door groups from clips
+let shadowPlane = null;
+const objectToGroup = new Map(); // for morph groups
+const objectToDoor  = new Map(); // for door groups
+let lastGLBBytes = null;
+
+/* Variants UI (en card VARIANTES) */
+let variantRowEl = null;
+let variantSelectEl = null;
+
+/* ---------- Bottom stats / performance elements ---------- */
+const statModel = document.getElementById('stat-model');
+const statSize  = document.getElementById('stat-size');
+const statTris  = document.getElementById('stat-tris');
+const statFPS   = document.getElementById('stat-fps');
+const statMS    = document.getElementById('stat-ms');
+const statCalls = document.getElementById('stat-calls');
+const statGeoms = document.getElementById('stat-geoms');
+const statText  = document.getElementById('stat-text');
+const statRot   = document.getElementById('stat-rot');
+const statBytes = document.getElementById('stat-bytes');
+document.getElementById('stats-reset')?.addEventListener('click', ()=> renderer.info.reset());
+let fpsEMA = 0;
+
+/* ---------- UI mode ---------- */
+function setUIMode(mode){
+  const lab = id => document.getElementById(id)?.closest('label');
+  const doors = lab('doorsToggle');
+  const autoH = lab('autoHideToggle');
+  const ceil  = lab('hideCeilingToggle');
+  const side  = document.getElementById('sidepanel');
+  const animCard = document.getElementById('animCard');
+
+  if(mode === 'clean'){
+    if(doors) doors.style.display = 'none';
+    if(autoH) autoH.style.display = 'none';
+    if(ceil)  ceil.style.display  = 'none';
+    side.style.display = 'none';
+    removeShadowSystem();
+    return;
+  }
+  const isAsset = (mode === 'asset');
+  if(doors) doors.style.display = isAsset ? 'none' : '';
+  if(autoH) autoH.style.display = isAsset ? 'none' : '';
+  if(ceil)  ceil.style.display  = isAsset ? 'none' : '';
+
+  side.style.display = isAsset ? '' : 'none';
+  animCard.style.display = isAsset ? '' : 'none';
+  document.getElementById('variantCard').style.display = isAsset ? '' : 'none';
+  if(!isAsset) removeShadowSystem();
+
+  updateTopbarVar();
+}
+setUIMode('clean');
+
+/* ---------- helpers ---------- */
+function setMsg(t){ document.getElementById('msg').textContent = t || ''; }
+function disposeMat(m){ ['map','normalMap','roughnessMap','metalnessMap','occlusionMap','emissiveMap'].forEach(k=>m[k]?.dispose?.()); }
+function clearModel(){
+  if(!current) return;
+  scene.remove(current);
+  current.traverse?.(o=>{ if(o.geometry) o.geometry.dispose(); const m=o.material; if(m) (Array.isArray(m)?m:[m]).forEach(disposeMat); });
+  current=null; allNodes=[]; doorPanels=[]; doorVariantPairs=[]; ceilings=[]; wallRoots=[]; lastHiddenWalls.clear();
+  removeAssetUI(); removeDoorUI(); removeShadowSystem(); objectToGroup.clear(); objectToDoor.clear();
+  lastGLBBytes = null;
+  statModel.textContent = 'Model: —';
+  statSize.textContent  = 'Size: —';
+  statTris.textContent  = 'Tris: —';
+  statBytes.textContent = 'GLB: —';
+  mixer = null;
+
+  // limpiar UI de variantes
+  if (variantRowEl?.parentNode) variantRowEl.parentNode.removeChild(variantRowEl);
+  variantRowEl = null; variantSelectEl = null;
+}
+function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geometry; t += g?.index ? g.index.count/3 : (g?.attributes?.position?.count||0)/3; }}); return Math.round(t); }
+function updateStats(sizeVec){
+  const tris = current ? triCount(current).toLocaleString() : '—';
+  const sz   = sizeVec ? `${sizeVec.x.toFixed(2)}×${sizeVec.y.toFixed(2)}×${sizeVec.z.toFixed(2)} m` : '—';
+  statTris.textContent = `Tris: ${tris}`;
+  statSize.textContent = `Size: ${sz}`;
+}
+function humanBytes(b){
+  if(b==null) return '—';
+  const u=['B','KB','MB','GB']; let i=0; let n=b;
+  while(n>=1024 && i<u.length-1){ n/=1024; i++; }
+  return `${n.toFixed(n<10&&i>0?1:0)} ${u[i]}`;
+}
+function extractIndex(name){
+  if(!name) return null;
+  let match = name.match(/door(\d+)/i); if(match) return match[1];
+  match = name.match(/panel(\d+)/i);    if(match) return match[1];
+  match = name.match(/(\d+)(?!.*\d)/);  return match ? match[1] : null;
+}
+function extractSide(name){
+  if(!name) return null;
+  if(/leftpanel/i.test(name) || /_left/i.test(name)) return 'left';
+  if(/rightpanel/i.test(name) || /_right/i.test(name)) return 'right';
+  return null;
+}
+function doorGroupKey(name){
+  if(!name) return '';
+  const m = name.match(/^(?:door_)?(.+)$/i);
+  return (m?m[1]:name).toLowerCase();
+}
+function stripDoorPrefix(s){ return s?.replace(/^door_/i,'') ?? s; }
+function guessModeFromFilename(name){
+  if(!name) return null;
+  const lower = name.toLowerCase();
+  if(/_(00|0[0-9])\.(glb|gltf)$/.test(lower)) return 'room';
+  return null;
+}
+function reparentKeepWorld(child, newParent){
+  child.updateMatrixWorld(true);
+  const childWorld = child.matrixWorld.clone();
+  newParent.updateMatrixWorld(true);
+  newParent.add(child);
+  const invParentWorld = newParent.matrixWorld.clone().invert();
+  const local = new THREE.Matrix4().multiplyMatrices(invParentWorld, childWorld);
+  local.decompose(child.position, child.quaternion, child.scale);
+  child.updateMatrixWorld(true);
+}
+
+/* ---------- puertas (rooms) — estático ---------- */
+function findDoorPanels(nodes){
+  const panels = nodes.filter(o => /(leftpanel|rightpanel)\d+$/i.test(o.name) && !/_open|_closed/i.test(o.name));
+  return panels.map(o=>{
+    const left = /leftpanel/i.test(o.name);
+    o.userData.closedQ  = o.quaternion.clone();
+    o.userData.sign     = left ? +1 : -1;
+    o.userData.groupKey = doorGroupKey(o.name);
+    o.userData.idx      = extractIndex(o.name);
+    o.userData.side     = left ? 'left' : 'right';
+    return o;
+  });
+}
+function findDoorVariantPairs(nodes){
+  const map = new Map();
+  nodes.forEach(o=>{
+    const m = o.name.match(/_(open|closed)(leftpanel|rightpanel)(\d+)$/i);
+    if(!m) return;
+    const state = m[1].toLowerCase();
+    const side  = m[2].toLowerCase();
+    const idx   = m[3];
+    const group = doorGroupKey(o.name);
+    const key   = `${group}|${side}|${idx}`;
+    if(!map.has(key)) map.set(key, { open:null, closed:null, group, side, idx });
+    map.get(key)[state] = o;
+  });
+  return Array.from(map.values()).filter(p => p.open || p.closed);
+}
+function getDoorRootsByIndex(groupKeyPref, idx, sidePref){
+  const roots = [];
+  doorPanels.forEach(d=>{
+    const di   = d.userData.idx ?? extractIndex(d.name);
+    const side = d.userData.side ?? extractSide(d.name);
+    const gk   = d.userData.groupKey ?? doorGroupKey(d.name);
+    if(String(di) === String(idx)
+      && (!sidePref || sidePref===side)
+      && (!groupKeyPref || groupKeyPref===gk)) roots.push(d);
+  });
+  doorVariantPairs.forEach(pair=>{
+    const { open, closed, group, side, idx:pi } = pair;
+    [open, closed].filter(Boolean).forEach(n=>{
+      const di = pi ?? extractIndex(n.name);
+      const gk = group ?? doorGroupKey(n.name);
+      const sd = side  ?? extractSide(n.name);
+      if(String(di) === String(idx)
+        && (!sidePref || sidePref===sd)
+        && (!groupKeyPref || groupKeyPref===gk)) roots.push(n);
     });
-    inp && inp.addEventListener('keydown', function(e){
-      if (e.key === 'Enter') btn && btn.click();
-    });
-  })();
-  </script>
-
-  <!-- App principal (módulo) -->
-  <script type="module">
-  import * as THREE from 'three';
-  import { GLTFLoader }     from 'three/addons/loaders/GLTFLoader.js';
-  import { DRACOLoader }    from 'three/addons/loaders/DRACOLoader.js';
-  import { KTX2Loader }     from 'three/addons/loaders/KTX2Loader.js';
-  import { OrbitControls }  from 'three/addons/controls/OrbitControls.js';
-  import { RoomEnvironment }from 'three/addons/environments/RoomEnvironment.js';
-
-  /* ---------- layout helper ---------- */
-  const topbar = document.getElementById('topbar');
-  function updateTopbarVar(){
-    const h = topbar?.offsetHeight || 72;
-    document.documentElement.style.setProperty('--topbarH', `${h}px`);
+  });
+  return roots;
+}
+function pickPreferredDoorRoot(idx, sidePref, groupKeyPref){
+  const roots = getDoorRootsByIndex(groupKeyPref, idx, sidePref);
+  if(!roots.length){
+    const anyGroup = getDoorRootsByIndex(null, idx, sidePref);
+    if(anyGroup.length) return anyGroup.find(r=>r.visible===true) || anyGroup[0];
+    const anySideAnyGroup = getDoorRootsByIndex(null, idx, null);
+    if(anySideAnyGroup.length) return anySideAnyGroup.find(r=>r.visible===true) || anySideAnyGroup[0];
+    return null;
   }
-  new ResizeObserver(updateTopbarVar).observe(topbar);
-  addEventListener('load', updateTopbarVar);
-  addEventListener('resize', updateTopbarVar);
+  return roots.find(r=>r.visible===true) || roots[0];
+}
+function reparentHardwareToDoors(nodes, _doorPanels){
+  const hardware = nodes.filter(o => /(handle|hinge|knob|hardware)/i.test(o.name));
+  hardware.forEach(h=>{
+    const idx          = extractIndex(h.name);
+    const sidePref     = extractSide(h.name);
+    const groupKeyPref = doorGroupKey(h.name);
 
-  /* ---------- renderer / scene / camera ---------- */
-  const canvas   = document.getElementById('c');
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping      = THREE.ACESFilmicToneMapping;
-  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type    = THREE.VSMShadowMap;
+    let target = (idx!=null) ? pickPreferredDoorRoot(idx, sidePref, groupKeyPref) : null;
 
-  const scene  = new THREE.Scene();
-  scene.background = new THREE.Color(0xc9c9c9);
-
-  const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 100);
-  camera.position.set(2,1.2,2);
-
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(0,0.6,0);
-  controls.enableDamping = true;
-  controls.autoRotate = false;
-  controls.autoRotateSpeed = 0.8;
-
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 1.0));
-  scene.add(new THREE.AmbientLight(0xffffff, 0.35));
-
-  /* Luz direccional para sombras (modo asset) */
-  let dirLight = null;
-
-  /* ---------- loaders ---------- */
-  const draco  = new DRACOLoader().setDecoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/draco/');
-  const ktx2   = new KTX2Loader().setTranscoderPath('https://unpkg.com/three@0.164/examples/jsm/libs/basis/').detectSupport(renderer);
-  const loader = new GLTFLoader().setDRACOLoader(draco).setKTX2Loader(ktx2);
-
-  /* ---------- state ---------- */
-  let current = null;
-  let mixer   = null;
-  let allNodes = [], doorPanels = [], doorVariantPairs = [], ceilings = [], wallRoots = [];
-  let lastHiddenWalls = new Set();
-  let assetRoot = null;
-  let animGroups = [];             // morph groups
-  let doorGroups = [];             // door groups from clips
-  let shadowPlane = null;
-  const objectToGroup = new Map(); // for morph groups
-  const objectToDoor  = new Map(); // for door groups
-  let lastGLBBytes = null;
-
-  /* Variants UI (in-panel) */
-  let variantRowEl = null;
-  let variantSelectEl = null;
-
-  /* ---------- Bottom stats / performance elements ---------- */
-  const statModel = document.getElementById('stat-model');
-  const statSize  = document.getElementById('stat-size');
-  const statTris  = document.getElementById('stat-tris');
-  const statFPS   = document.getElementById('stat-fps');
-  const statMS    = document.getElementById('stat-ms');
-  const statCalls = document.getElementById('stat-calls');
-  const statGeoms = document.getElementById('stat-geoms');
-  const statText  = document.getElementById('stat-text');
-  const statRot   = document.getElementById('stat-rot');
-  const statBytes = document.getElementById('stat-bytes');
-  document.getElementById('stats-reset')?.addEventListener('click', ()=> renderer.info.reset());
-  let fpsEMA = 0;
-
-  /* ---------- UI mode ---------- */
-  function setUIMode(mode){
-    const lab = id => document.getElementById(id)?.closest('label');
-    const doors = lab('doorsToggle');
-    const autoH = lab('autoHideToggle');
-    const ceil  = lab('hideCeilingToggle');
-    const side  = document.getElementById('sidepanel');
-    const animCard = document.getElementById('animCard');
-
-    if(mode === 'clean'){
-      if(doors) doors.style.display = 'none';
-      if(autoH) autoH.style.display = 'none';
-      if(ceil)  ceil.style.display  = 'none';
-      side.style.display = 'none';
-      removeShadowSystem();
-      return;
-    }
-    const isAsset = (mode === 'asset');
-    if(doors) doors.style.display = isAsset ? 'none' : '';
-    if(autoH) autoH.style.display = isAsset ? 'none' : '';
-    if(ceil)  ceil.style.display  = isAsset ? 'none' : '';
-
-    side.style.display = isAsset ? '' : 'none';
-    animCard.style.display = isAsset ? '' : 'none'; // ACCIONABLES (desktop; móvil se oculta por CSS)
-    // variantCard se controla en setupVariants
-    if(!isAsset) removeShadowSystem();
-
-    updateTopbarVar();
-  }
-  setUIMode('clean');
-
-  /* ---------- helpers ---------- */
-  function setMsg(t){ document.getElementById('msg').textContent = t || ''; }
-  function disposeMat(m){ ['map','normalMap','roughnessMap','metalnessMap','occlusionMap','emissiveMap'].forEach(k=>m[k]?.dispose?.()); }
-  function clearModel(){
-    if(!current) return;
-    scene.remove(current);
-    current.traverse?.(o=>{ if(o.geometry) o.geometry.dispose(); const m=o.material; if(m) (Array.isArray(m)?m:[m]).forEach(disposeMat); });
-    current=null; allNodes=[]; doorPanels=[]; doorVariantPairs=[]; ceilings=[]; wallRoots=[]; lastHiddenWalls.clear();
-    removeAssetUI(); removeDoorUI(); removeShadowSystem(); objectToGroup.clear(); objectToDoor.clear();
-    lastGLBBytes = null;
-    statModel.textContent = 'Model: —';
-    statSize.textContent  = 'Size: —';
-    statTris.textContent  = 'Tris: —';
-    statBytes.textContent = 'GLB: —';
-    mixer = null;
-
-    // limpiar UI de variantes
-    const vPanel = document.getElementById('variantPanel');
-    if (vPanel) vPanel.innerHTML = '';
-    document.getElementById('variantCard').style.display = 'none';
-    variantRowEl = null; variantSelectEl = null;
-  }
-  function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geometry; t += g?.index ? g.index.count/3 : (g?.attributes?.position?.count||0)/3; }}); return Math.round(t); }
-  function updateStats(sizeVec){
-    const tris = current ? triCount(current).toLocaleString() : '—';
-    const sz   = sizeVec ? `${sizeVec.x.toFixed(2)}×${sizeVec.y.toFixed(2)}×${sizeVec.z.toFixed(2)} m` : '—';
-    document.getElementById('stat-tris').textContent = `Tris: ${tris}`;
-    document.getElementById('stat-size').textContent = `Size: ${sz}`;
-  }
-  function humanBytes(b){
-    if(b==null) return '—';
-    const u=['B','KB','MB','GB']; let i=0; let n=b;
-    while(n>=1024 && i<u.length-1){ n/=1024; i++; }
-    return `${n.toFixed(n<10&&i>0?1:0)} ${u[i]}`;
-  }
-
-  /* ---------- Asset UI (morphs) ---------- */
-  function removeAssetUI(){
-    animGroups = [];
-    const panel = document.getElementById('animPanel');
-    if(panel) panel.innerHTML = '';
-  }
-  function collectMorphMeshes(root){
-    const out = [];
-    root.traverse(o=>{ if(o.isMesh && o.morphTargetInfluences && o.morphTargetDictionary){ out.push(o); }});
-    return out;
-  }
-  function uniqueNamesFromMeshes(meshes){
-    const set = new Set();
-    meshes.forEach(m=>{ const d=m.morphTargetDictionary; if(!d) return; Object.keys(d).forEach(k=>set.add(k)); });
-    return Array.from(set);
-  }
-  function findAnimRoots(asset){
-    const arr=[]; asset.traverse(o=>{ if(o!==asset && o.name && /^anim_/i.test(o.name)) arr.push(o); });
-    return arr;
-  }
-  function stripAnimPrefix(s){ return s?.replace(/^anim_/i,'') ?? s; }
-
-  /* ---------- Doors from clips ---------- */
-  function removeDoorUI(){ doorGroups = []; }
-  function buildDoorControlsFromClips(root, clips){
-    if(!clips?.length) return;
-    const panel = document.getElementById('animPanel');
-    if(!panel) return;
-
-    clips
-      .filter(c => /^door_/i.test(c.name))
-      .forEach((clip)=>{
-        const track = clip.tracks[0];
-        if(!track) return;
-
-        if(!mixer) mixer = new THREE.AnimationMixer(root);
-        const action = mixer.clipAction(clip);
-        action.clampWhenFinished = true;
-        action.enabled = true;
-        action.play();
-        action.paused = true;
-        action.time   = 0;
-
-        const pathFull = track.name.split('.')[0];
-        const pathBase = pathFull.split('/').pop();
-
-        let targetNode = null;
-        root.traverse(o=>{ if(!targetNode && o.name === pathBase) targetNode = o; });
-        if(!targetNode) targetNode = root;
-
-        targetNode.traverse(n=> objectToDoor.set(n, doorGroups.length));
-
-        doorGroups.push({
-          name: pathBase.replace(/^door_/i,''),
-          clip, action, node: targetNode,
-          duration: clip.duration, value: 0, slider: null
-        });
-      });
-
-    renderActionsPanel();
-  }
-  function renderActionsPanel(){
-    const panel = document.getElementById('animPanel');
-    if(!panel) return;
-    panel.innerHTML = '';
-
-    // Sliders puertas
-    doorGroups.forEach((g)=>{
-      const row = document.createElement('div'); row.className='act-row';
-      const name = document.createElement('div'); name.textContent = g.name; row.appendChild(name);
-      const slider = document.createElement('input'); slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.01'; slider.value=String(g.value);
-      slider.oninput = ()=> setDoorValue(g, parseFloat(slider.value));
-      row.appendChild(slider); g.slider = slider;
-      panel.appendChild(row);
-    });
-
-    // Morphs
-    if(!assetRoot){
-      document.getElementById('animCard').style.display='none';
-      return;
-    }
-    const animRoots = findAnimRoots(assetRoot);
-    const groups = [];
-    objectToGroup.clear();
-
-    animRoots.forEach((ar, gi)=>{
-      const meshes = collectMorphMeshes(ar); if(!meshes.length) return;
-      const morphNames = uniqueNamesFromMeshes(meshes); if(!morphNames.length) return;
-      ar.traverse(n=>{ objectToGroup.set(n, gi); });
-      groups.push({ name: ar.name, node: ar, meshes, morphNames, activeMorph: morphNames[0], sliderEl:null, selectEl:null, tween:null });
-    });
-    animGroups = groups;
-
-    animGroups.forEach(group=>{
-      const row = document.createElement('div'); row.className='act-row';
-      const label = document.createElement('div'); label.textContent = stripAnimPrefix(group.name); row.appendChild(label);
-
-      const slider = document.createElement('input'); slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.01'; slider.value='0';
-      slider.oninput=()=>{ const val=parseFloat(slider.value);
-        group.meshes.forEach(m=>{ const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return;
-          if(group.activeMorph in d){ inf[d[group.activeMorph]]=val; m.needsUpdate=true; }
-        });
-      };
-      row.appendChild(slider); group.sliderEl=slider;
-      panel.appendChild(row);
-    });
-
-    document.getElementById('animCard').style.display='';
-  }
-  function setDoorValue(group, value){
-    group.value = THREE.MathUtils.clamp(value, 0, 1);
-    if(!group.action) return;
-    group.action.paused = true;
-    group.action.time   = group.duration * group.value;
-    group.action.syncWith(group.action);
-    if(group.slider) group.slider.value = String(group.value);
-  }
-
-  /* ---------- Sombras suaves (shadow catcher) ---------- */
-  let dirLightTargetAdded = false;
-  function setCastShadow(obj, val){ obj.traverse(o=>{ if(o.isMesh){ o.castShadow = !!val; }}); }
-  function ensureShadowSystem(){
-    if(!assetRoot) return;
-
-    if(!dirLight){
-      dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
-      dirLight.castShadow = true;
-      dirLight.shadow.mapSize.set(2048,2048);
-      dirLight.shadow.bias = -0.00015;
-      dirLight.shadow.normalBias = 0.015;
-      scene.add(dirLight);
-    }
-    if(!dirLightTargetAdded){
-      scene.add(dirLight.target);
-      dirLightTargetAdded = true;
-    }
-    if(!shadowPlane){
-      const mat = new THREE.ShadowMaterial({ opacity: 0.07 });
-      const geo = new THREE.PlaneGeometry(1,1);
-      shadowPlane = new THREE.Mesh(geo, mat);
-      shadowPlane.rotation.x = -Math.PI/2;
-      shadowPlane.receiveShadow = true;
-      shadowPlane.renderOrder = -1;
-      scene.add(shadowPlane);
-    }
-
-    const box = new THREE.Box3().setFromObject(assetRoot);
-    const size= box.getSize(new THREE.Vector3());
-    const ctr = box.getCenter(new THREE.Vector3());
-
-    shadowPlane.position.set(ctr.x, box.min.y + 0.0001, ctr.z);
-    shadowPlane.scale.set(size.x*1.05, size.z*1.05, 1);
-
-    const dir = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
-    const elev = 0.9;
-    const lateral = 0.25;
-    dirLight.position.set(ctr.x + dir.x*size.x*lateral, box.max.y + size.y*1.4*elev, ctr.z + dir.z*size.z*lateral);
-    dirLight.target.position.set(ctr.x, ctr.y, ctr.z);
-
-    dirLight.shadow.radius = 4.0;
-
-    const cam = dirLight.shadow.camera;
-    const r = Math.max(size.x, size.z) * 0.65;
-    cam.left=-r; cam.right=r; cam.top=r; cam.bottom=-r; cam.near=0.1; cam.far=size.y * 4.0;
-    cam.updateProjectionMatrix();
-
-    setCastShadow(assetRoot, true);
-  }
-  function removeShadowSystem(){
-    if(shadowPlane){
-      shadowPlane.geometry.dispose(); shadowPlane.material.dispose();
-      scene.remove(shadowPlane); shadowPlane=null;
-    }
-    if(dirLight){
-      scene.remove(dirLight.target);
-      scene.remove(dirLight);
-      dirLight = null;
-      dirLightTargetAdded = false;
-    }
-  }
-
-  /* ---------- Variants (KHR_materials_variants) - en caja VARIANTES ---------- */
-  async function setupVariants(gltf){
-    // limpiar UI previa
-    const vPanel = document.getElementById('variantPanel');
-    vPanel.innerHTML = '';
-    document.getElementById('variantCard').style.display = 'none';
-    variantRowEl = null; variantSelectEl = null;
-
-    const parser = gltf.parser;
-    const json   = parser.json;
-    const rootExt = json.extensions && json.extensions.KHR_materials_variants;
-    if(!rootExt || !rootExt.variants || !rootExt.variants.length) return;
-
-    const variantNames = rootExt.variants.map(v => v.name);
-
-    // cache materiales
-    const matCache = new Map();
-    const getMaterialByIndex = (i) => {
-      if (!matCache.has(i)) matCache.set(i, parser.getDependency('material', i));
-      return matCache.get(i);
-    };
-
-    // guardar material original
-    gltf.scene.traverse(o => {
-      if (o.isMesh && o.material && !o.userData._origMaterial) {
-        o.userData._origMaterial = o.material;
+    if(!target){
+      let candidates = _doorPanels;
+      const sameGroup = _doorPanels.filter(d => (d.userData.groupKey ?? doorGroupKey(d.name)) === groupKeyPref);
+      if(sameGroup.length) candidates = sameGroup;
+      if(sidePref){
+        const filtered = candidates.filter(d=> (d.userData.side ?? extractSide(d.name))===sidePref);
+        if(filtered.length) candidates = filtered;
       }
-    });
-
-    async function applyVariant(root, name){
-      const nameToIdx = new Map(rootExt.variants.map((v, i) => [v.name, i]));
-      const wantedIdx = nameToIdx.get(name);
-      if (wantedIdx == null) return;
-
-      const pending = [];
-      root.traverse(obj => {
-        if (!obj.isMesh) return;
-        const ext = obj.userData?.gltfExtensions?.KHR_materials_variants;
-        if (!ext || !ext.mappings) {
-          if (obj.userData._origMaterial) obj.material = obj.userData._origMaterial;
-          return;
-        }
-        let chosen = null;
-        for (const m of ext.mappings) {
-          if (m.variants?.includes(wantedIdx)) { chosen = m; break; }
-        }
-        if (chosen && typeof chosen.material === 'number') {
-          pending.push(getMaterialByIndex(chosen.material).then(mat => { obj.material = mat; }));
-        } else {
-          if (obj.userData._origMaterial) obj.material = obj.userData._origMaterial;
-        }
+      let best=null, bestDist=Infinity;
+      const hp = new THREE.Vector3(); new THREE.Box3().setFromObject(h).getCenter(hp);
+      candidates.forEach(d=>{
+        const dp = new THREE.Vector3(); new THREE.Box3().setFromObject(d).getCenter(dp);
+        const dist = hp.distanceTo(dp);
+        if(dist<bestDist){ bestDist=dist; best=d; }
       });
-      await Promise.all(pending);
+      target = best;
     }
 
-    // construir fila en VARIANTES (misma UI que accionables)
-    const row   = document.createElement('div'); row.className = 'act-row';
-    const label = document.createElement('div'); label.textContent = 'Material';
-    const select = document.createElement('select');
-
-    variantNames.forEach((n, i)=>{
-      const opt = document.createElement('option');
-      opt.value = n; opt.textContent = n;
-      if (i===0) opt.selected = true;
-      select.appendChild(opt);
-    });
-
-    row.appendChild(label);
-    row.appendChild(select);
-    vPanel.appendChild(row);
-
-    variantRowEl   = row;
-    variantSelectEl= select;
-
-    document.getElementById('variantCard').style.display = ''; // mostrar caja VARIANTES
-
-    await applyVariant(gltf.scene, variantNames[0]);
-    select.onchange = async ()=> { await applyVariant(gltf.scene, select.value); };
-  }
-
-  /* ---------- placing ---------- */
-  function place(root, clips){
-    root.traverse(o=>{
-      if(o.isMesh && /collider/i.test(o.name)) o.visible=false;
-      if(o.isMesh && /^ceiling\d*$/i.test(o.name)) o.visible=false;
-    });
-
-    new THREE.Box3().setFromObject(root).getCenter(root.position).multiplyScalar(-1);
-    const box  = new THREE.Box3().setFromObject(root);
-    const size = box.getSize(new THREE.Vector3());
-    root.position.y -= box.min.y;
-
-    current = root; scene.add(root);
-
-    // asset vs room
-    assetRoot = null;
-    current.traverse(o=>{ if(!assetRoot && o.name && /^model_/i.test(o.name)) assetRoot = o; });
-    setUIMode(assetRoot ? 'asset' : 'room');
-
-    // ACCIONABLES de puertas/morphs
-    if(assetRoot){
-      buildDoorControlsFromClips(current, clips||[]);
-      renderActionsPanel();
-      ensureShadowSystem();
-    } else {
-      removeAssetUI(); removeShadowSystem(); objectToGroup.clear(); objectToDoor.clear();
+    if(target && h.parent !== target) reparentKeepWorld(h, target);
+  });
+}
+function enforceDoorVariantExclusivity(defaultState='closed'){
+  doorVariantPairs.forEach(({open, closed})=>{
+    if(open && closed){
+      open.visible   = (defaultState === 'open');
+      closed.visible = (defaultState === 'closed');
+    }else if(open){
+      open.visible = (defaultState === 'open');
+    }else if(closed){
+      closed.visible = (defaultState === 'closed');
     }
+  });
+}
 
-    // stats
-    const maxDim = Math.max(size.x,size.y,size.z);
-    camera.position.setScalar(maxDim*1.6).setY(maxDim*0.8);
-    controls.target.copy(new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3()));
-    controls.update();
+/* ---------- Asset UI (morphs) ---------- */
+function removeAssetUI(){
+  animGroups = [];
+  const panel = document.getElementById('animPanel');
+  if(panel) panel.innerHTML = '';
+}
+function collectMorphMeshes(root){
+  const out = [];
+  root.traverse(o=>{ if(o.isMesh && o.morphTargetInfluences && o.morphTargetDictionary){ out.push(o); }});
+  return out;
+}
+function uniqueNamesFromMeshes(meshes){
+  const set = new Set();
+  meshes.forEach(m=>{ const d=m.morphTargetDictionary; if(!d) return; Object.keys(d).forEach(k=>set.add(k)); });
+  return Array.from(set);
+}
+function findAnimRoots(asset){
+  const arr=[]; asset.traverse(o=>{ if(o!==asset && o.name && /^anim_/i.test(o.name)) arr.push(o); });
+  return arr;
+}
+function stripAnimPrefix(s){ return s?.replace(/^anim_/i,'') ?? s; }
 
-    document.getElementById('stat-model').textContent = `Model: ${root.name || '(scene)'}`;
-    updateStats(size);
-    updateTopbarVar();
-  }
+/* ---------- Doors from clips ---------- */
+function removeDoorUI(){ doorGroups = []; }
+function buildDoorControlsFromClips(root, clips){
+  if(!clips?.length) return;
+  const panel = document.getElementById('animPanel');
+  if(!panel) return;
 
-  /* ---------- Click interacciones ---------- */
-  const ray = new THREE.Raycaster();
-  const mouse = new THREE.Vector2();
-  let downPos = null;
-  function screenToNDC(e){
-    const rect = renderer.domElement.getBoundingClientRect();
-    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-  }
-  canvas.addEventListener('pointerdown', (e)=>{ downPos = {x:e.clientX,y:e.clientY}; });
-  canvas.addEventListener('pointerup', (e)=>{
-    if(controls.dragging) return;
-    if(downPos && (Math.hypot(e.clientX-downPos.x, e.clientY-downPos.y) > 3)) return;
+  clips
+    .filter(c => /^door_/i.test(c.name))
+    .forEach((clip)=>{
+      const track = clip.tracks[0];
+      if(!track) return;
 
-    const rect = renderer.domElement.getBoundingClientRect();
-    if(e.clientY < rect.top + (topbar?.offsetHeight||0)) return;
+      if(!mixer) mixer = new THREE.AnimationMixer(root);
+      const action = mixer.clipAction(clip);
+      action.clampWhenFinished = true;
+      action.enabled = true;
+      action.play();        // inicializa
+      action.paused = true; // control manual
+      action.time   = 0;
 
-    screenToNDC(e);
-    ray.setFromCamera(mouse, camera);
-    const intersects = ray.intersectObject(current ?? scene, true);
-    if(!intersects.length) return;
-    // (Para mantener simple, los toggles de puertas/morphs quedan igual que antes)
+      const pathFull = track.name.split('.')[0];
+      const pathBase = pathFull.split('/').pop();
+
+      let targetNode = null;
+      root.traverse(o=>{ if(!targetNode && o.name === pathBase) targetNode = o; });
+      if(!targetNode) targetNode = root;
+
+      targetNode.traverse(n=> objectToDoor.set(n, doorGroups.length));
+
+      doorGroups.push({
+        name: stripDoorPrefix(targetNode.name),
+        clip, action, node: targetNode,
+        duration: clip.duration, value: 0, slider: null
+      });
+    });
+
+  renderActionsPanel();
+}
+function renderActionsPanel(){
+  const panel = document.getElementById('animPanel');
+  if(!panel) return;
+  panel.innerHTML = '';
+
+  // Puertas
+  doorGroups.forEach((g)=>{
+    const row = document.createElement('div'); row.className='act-row';
+    const name = document.createElement('div'); name.textContent = g.name; row.appendChild(name);
+    const slider = document.createElement('input'); slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.01'; slider.value=String(g.value);
+    slider.oninput = ()=> setDoorValue(g, parseFloat(slider.value));
+    row.appendChild(slider); g.slider = slider;
+    panel.appendChild(row);
   });
 
-  /* ---------- loading ---------- */
-  function loadBlob(file){
-    setUIMode('clean'); setMsg('Loading local file…'); clearModel();
-    const url = URL.createObjectURL(file);
-    document.getElementById('stat-bytes').textContent = `GLB: ${humanBytes(file.size)}`;
-    loader.load(url, async (g)=>{
-        place(g.scene, g.animations||[]);
-        await setupVariants(g); // NUEVA caja VARIANTES
-        setMsg(file.name);
-        URL.revokeObjectURL(url);
-      },
-      undefined, e=>{ console.error(e); setMsg('Error with local file'); });
+  // Morphs
+  if(!assetRoot){
+    document.getElementById('animCard').style.display='none';
+    return;
+  }
+  const animRoots = findAnimRoots(assetRoot);
+  const groups = [];
+  objectToGroup.clear();
+
+  animRoots.forEach((ar, gi)=>{
+    const meshes = collectMorphMeshes(ar); if(!meshes.length) return;
+    const morphNames = uniqueNamesFromMeshes(meshes); if(!morphNames.length) return;
+    ar.traverse(n=>{ objectToGroup.set(n, gi); });
+    groups.push({ name: ar.name, node: ar, meshes, morphNames, activeMorph: morphNames[0], sliderEl:null, selectEl:null, tween:null });
+  });
+  animGroups = groups;
+
+  animGroups.forEach(group=>{
+    const row = document.createElement('div'); row.className='act-row';
+    const label = document.createElement('div'); label.textContent = stripAnimPrefix(group.name); row.appendChild(label);
+
+    const slider = document.createElement('input'); slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.01'; slider.value='0';
+    slider.oninput=()=>{ const val=parseFloat(slider.value);
+      group.meshes.forEach(m=>{ const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return;
+        if(group.activeMorph in d){ inf[d[group.activeMorph]]=val; m.needsUpdate=true; }
+      });
+    };
+    row.appendChild(slider); group.sliderEl=slider;
+    panel.appendChild(row);
+  });
+
+  document.getElementById('animCard').style.display='';
+}
+function setDoorValue(group, value){
+  group.value = THREE.MathUtils.clamp(value, 0, 1);
+  if(!group.action) return;
+  group.action.paused = true;
+  group.action.time   = group.duration * group.value;
+  group.action.syncWith(group.action);
+  if(group.slider) group.slider.value = String(group.value);
+}
+function tweenDoor(group, toValue, durationMs=500){
+  const from = group.value ?? 0;
+  const start = performance.now();
+  const step = (t)=>{
+    const k = Math.min(1, (t-start)/durationMs);
+    const v = from + (toValue-from)*k;
+    setDoorValue(group, v);
+    if(k<1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+/* ---------- Sombras suaves (shadow catcher) ---------- */
+function setCastShadow(obj, val){ obj.traverse(o=>{ if(o.isMesh){ o.castShadow = !!val; }}); }
+function ensureShadowSystem(){
+  if(!assetRoot) return;
+
+  if(!dirLight){
+    dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(2048,2048);
+    dirLight.shadow.bias = -0.00015;
+    dirLight.shadow.normalBias = 0.015;
+    scene.add(dirLight);
+  }
+  if(!shadowPlane){
+    const mat = new THREE.ShadowMaterial({ opacity: 0.07 });
+    const geo = new THREE.PlaneGeometry(1,1);
+    shadowPlane = new THREE.Mesh(geo, mat);
+    shadowPlane.rotation.x = -Math.PI/2;
+    shadowPlane.receiveShadow = true;
+    shadowPlane.renderOrder = -1;
+
+    /* 👇 no intercepte raycasts */
+    shadowPlane.userData.ignorePick = true;
+    shadowPlane.raycast = () => {};
+
+    scene.add(shadowPlane);
   }
 
-  /* ---------- UI ---------- */
-  const fileInput = document.getElementById('fileInput');
-  document.getElementById('fileBtn').onclick = ()=>{ fileInput.value=''; fileInput.click(); };
-  fileInput.onchange = ()=>{ const f=fileInput.files?.[0]; if(f) loadBlob(f); };
-  document.getElementById('doorsToggle').onchange = e=> {/* room only */};
-  document.getElementById('hideCeilingToggle').onchange = e=>{ /* room only (mantenido) */ };
-  document.getElementById('autoRotateToggle').onchange = e=>{
-    controls.autoRotate = e.target.checked;
-    document.getElementById('stat-rot').textContent = `Rotate: ${e.target.checked?'On':'Off'}`;
+  const box = new THREE.Box3().setFromObject(assetRoot);
+  const size= box.getSize(new THREE.Vector3());
+  const ctr = box.getCenter(new THREE.Vector3());
+
+  shadowPlane.position.set(ctr.x, box.min.y + 0.0001, ctr.z);
+  shadowPlane.scale.set(size.x*1.05, size.z*1.05, 1);
+
+  const dir = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
+  const elev = 0.9;
+  const lateral = 0.25;
+  dirLight.position.set(ctr.x + dir.x*size.x*lateral, box.max.y + size.y*1.4*elev, ctr.z + dir.z*size.z*lateral);
+  dirLight.target.position.set(ctr.x, ctr.y, ctr.z);
+  scene.add(dirLight.target);
+
+  dirLight.shadow.radius = 4.0;
+
+  const cam = dirLight.shadow.camera;
+  const r = Math.max(size.x, size.z) * 0.65;
+  cam.left=-r; cam.right=r; cam.top=r; cam.bottom=-r; cam.near=0.1; cam.far=size.y * 4.0;
+  cam.updateProjectionMatrix();
+
+  setCastShadow(assetRoot, true);
+}
+function removeShadowSystem(){
+  if(shadowPlane){
+    shadowPlane.geometry.dispose(); shadowPlane.material.dispose();
+    scene.remove(shadowPlane); shadowPlane=null;
+  }
+  if(dirLight){
+    scene.remove(dirLight.target);
+    scene.remove(dirLight);
+    dirLight = null;
+  }
+}
+
+/* ---------- Variants (KHR_materials_variants) - en card VARIANTES ---------- */
+async function setupVariants(gltf){
+  // limpiar UI previa
+  if (variantRowEl?.parentNode) variantRowEl.parentNode.removeChild(variantRowEl);
+  variantRowEl = null; variantSelectEl = null;
+
+  const parser = gltf.parser;
+  const json   = parser.json;
+  const rootExt = json.extensions && json.extensions.KHR_materials_variants;
+  if(!rootExt || !rootExt.variants || !rootExt.variants.length) return;
+
+  const variantNames = rootExt.variants.map(v => v.name);
+
+  // cache materiales
+  const matCache = new Map();
+  const getMaterialByIndex = (i) => {
+    if (!matCache.has(i)) matCache.set(i, parser.getDependency('material', i));
+    return matCache.get(i);
   };
 
-  /* ---------- drag & drop ---------- */
-  const drop=document.getElementById('drop');
-  ['dragenter','dragover','dragleave','drop'].forEach(ev=>{
-    window.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); }, false);
+  // guardar material original
+  gltf.scene.traverse(o => {
+    if (o.isMesh && o.material && !o.userData._origMaterial) {
+      o.userData._origMaterial = o.material;
+    }
   });
-  window.addEventListener('dragenter', ()=> drop.style.display='flex');
-  window.addEventListener('dragover',  ()=> drop.style.display='flex');
-  window.addEventListener('dragleave', e=>{
-    if(e.clientX<=0||e.clientY<=0||e.clientX>=innerWidth||e.clientY>=innerHeight){ drop.style.display='none'; }
-  });
-  function handleDrop(e){
-    e.preventDefault(); e.stopPropagation();
-    drop.style.display='none';
-    const f=e.dataTransfer?.files?.[0]; if(f) loadBlob(f);
-  }
-  drop.addEventListener('drop', handleDrop);
 
-  /* ---------- stats toggle (mobile) ---------- */
-  const statsEl = document.getElementById('stats');
-  const statsToggle = document.getElementById('statsToggle');
-  function isMobile(){ return window.matchMedia('(max-width: 640px)').matches; }
-  function applyStatsMode(){
-    if(isMobile()){
-      statsEl.classList.remove('open');
-      statsToggle.setAttribute('aria-expanded','false');
-    }else{
-      statsEl.classList.add('open');
-      statsToggle.setAttribute('aria-expanded','true');
+  async function applyVariant(root, name){
+    const nameToIdx = new Map(rootExt.variants.map((v, i) => [v.name, i]));
+    const wantedIdx = nameToIdx.get(name);
+    if (wantedIdx == null) return;
+
+    const pending = [];
+    root.traverse(obj => {
+      if (!obj.isMesh) return;
+      const ext = obj.userData?.gltfExtensions?.KHR_materials_variants;
+      if (!ext || !ext.mappings) {
+        if (obj.userData._origMaterial) obj.material = obj.userData._origMaterial;
+        return;
+      }
+      let chosen = null;
+      for (const m of ext.mappings) {
+        if (m.variants?.includes(wantedIdx)) { chosen = m; break; }
+      }
+      if (chosen && typeof chosen.material === 'number') {
+        pending.push(getMaterialByIndex(chosen.material).then(mat => { obj.material = mat; }));
+      } else {
+        if (obj.userData._origMaterial) obj.material = obj.userData._origMaterial;
+      }
+    });
+    await Promise.all(pending);
+  }
+
+  // asegurar panel visible
+  const variantCard = document.getElementById('variantCard');
+  variantCard.style.display = '';
+  const panel = document.getElementById('variantPanel');
+
+  // construir fila
+  const row   = document.createElement('div'); row.className = 'act-row';
+  const label = document.createElement('div'); label.textContent = 'Material';
+  const select = document.createElement('select');
+
+  variantNames.forEach((n, i)=>{
+    const opt = document.createElement('option');
+    opt.value = n; opt.textContent = n;
+    if (i===0) opt.selected = true;
+    select.appendChild(opt);
+  });
+
+  row.appendChild(label);
+  row.appendChild(select);
+  panel.innerHTML = '';           // una sola fila
+  panel.appendChild(row);
+
+  variantRowEl   = row;
+  variantSelectEl= select;
+
+  await applyVariant(gltf.scene, variantNames[0]);
+  select.onchange = async ()=> { await applyVariant(gltf.scene, select.value); };
+}
+
+/* ---------- placing ---------- */
+function place(root, clips){
+  root.traverse(o=>{
+    if(o.isMesh && /collider/i.test(o.name)) o.visible=false;
+    if(o.isMesh && /^ceiling\d*$/i.test(o.name)) o.visible=false;
+  });
+
+  new THREE.Box3().setFromObject(root).getCenter(root.position).multiplyScalar(-1);
+  const box  = new THREE.Box3().setFromObject(root);
+  const size = box.getSize(new THREE.Vector3());
+  root.position.y -= box.min.y;
+
+  allNodes = []; root.traverse(o=>{ if(o.name) allNodes.push(o); });
+  ceilings  = allNodes.filter(o => /^ceiling\d*$/i.test(o.name));
+  wallRoots = allNodes.filter(o => /^wall\d+$/i.test(o.name));
+
+  doorPanels       = findDoorPanels(allNodes);
+  doorVariantPairs = findDoorVariantPairs(allNodes);
+  enforceDoorVariantExclusivity('closed');
+  reparentHardwareToDoors(allNodes, doorPanels);
+
+  current = root; scene.add(root);
+
+  assetRoot = null;
+  current.traverse(o=>{ if(!assetRoot && o.name && /^model_/i.test(o.name)) assetRoot = o; });
+
+  setUIMode(assetRoot ? 'asset' : 'room');
+  removeDoorUI();
+  if(assetRoot){
+    buildDoorControlsFromClips(current, clips||[]);
+    renderActionsPanel();
+    ensureShadowSystem();
+  } else {
+    removeAssetUI(); removeShadowSystem(); objectToGroup.clear(); objectToDoor.clear();
+  }
+
+  mixer = mixer || new THREE.AnimationMixer(current);
+
+  const maxDim = Math.max(size.x,size.y,size.z);
+  camera.position.setScalar(maxDim*1.6).setY(maxDim*0.8);
+  controls.target.copy(new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3()));
+  controls.update();
+
+  statModel.textContent = `Model: ${root.name || '(scene)'}`;
+  updateStats(size);
+  updateTopbarVar();
+}
+
+/* ---------- auto-hide wall (rooms) ---------- */
+const ray = new THREE.Raycaster();
+function wallRootOf(obj){ let p=obj; while(p){ if(/^wall\d+$/i.test(p.name)) return p; p=p.parent; } return null; }
+function sampleFrontWalls(){
+  if(!wallRoots?.length) return new Set();
+  let closest=null, closestDist=Infinity;
+  const distToTarget = camera.position.distanceTo(controls.target);
+  const samples=[{x:0,y:0},{x:0.14,y:0},{x:-0.14,y:0},{x:0,y:0.14},{x:0,y:-0.14}];
+  for(const ndc of samples){
+    ray.setFromCamera(ndc, camera);
+    const hits = ray.intersectObjects(wallRoots, true);
+    if(hits.length){
+      const h = hits[0];
+      if(h.distance < distToTarget*0.995 && h.distance < closestDist){
+        closest = wallRootOf(h.object); closestDist = h.distance;
+      }
     }
   }
-  statsToggle.addEventListener('click', ()=>{ if(!isMobile()) return;
-    const open = statsEl.classList.toggle('open');
-    statsToggle.setAttribute('aria-expanded', open ? 'true':'false');
-  });
-  addEventListener('resize', applyStatsMode);
-  applyStatsMode();
+  return closest ? new Set([closest]) : new Set();
+}
+function updateAutoHide(){
+  const autoHToggle=document.getElementById('autoHideToggle');
+  if(!autoHToggle || autoHToggle.closest('label').style.display==='none') return;
+  if(!autoHToggle.checked || !current) return;
+  const front = sampleFrontWalls();
+  for(const wr of Array.from(lastHiddenWalls)){ if(!front.has(wr)){ wr.visible=true; lastHiddenWalls.delete(wr);} }
+  for(const wr of front){ if(!lastHiddenWalls.has(wr)){ wr.visible=false; lastHiddenWalls.add(wr);} }
+}
 
-  /* ---------- resize & loop ---------- */
-  function resize(){
-    const w=innerWidth,h=innerHeight;
-    renderer.setSize(w,h,false);
-    camera.aspect=w/h; camera.updateProjectionMatrix();
-    updateTopbarVar();
+/* ---------- Clicks (morphs y puertas) ---------- */
+const mouse = new THREE.Vector2();
+let downPos = null;
+function screenToNDC(e){
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+}
+function findMorphGroupFromObject(obj){
+  let p=obj; while(p){ if(objectToGroup.has(p)) return objectToGroup.get(p); p=p.parent; } return null;
+}
+function findDoorGroupFromObject(obj){
+  let p=obj; while(p){ if(objectToDoor.has(p)) return objectToDoor.get(p); p=p.parent; } return null;
+}
+canvas.addEventListener('pointerdown', (e)=>{ downPos = {x:e.clientX,y:e.clientY}; });
+canvas.addEventListener('pointerup', (e)=>{
+  if(controls.dragging) return;
+  if(downPos && (Math.hypot(e.clientX-downPos.x, e.clientY-downPos.y) > 3)) return;
+
+  const rect = renderer.domElement.getBoundingClientRect();
+  if(e.clientY < rect.top + (topbar?.offsetHeight||0)) return;
+
+  screenToNDC(e);
+  ray.setFromCamera(mouse, camera);
+
+  // Filtrar primer hit válido (ignorar cosas marcadas, p.ej. shadowPlane)
+  const hits = ray.intersectObject(current ?? scene, true);
+  const firstHit = hits.find(h => !h.object.userData?.ignorePick);
+  if(!firstHit) return;
+
+  const obj = firstHit.object;
+
+  // Prioridad: puertas animadas
+  const dIdx = findDoorGroupFromObject(obj);
+  if(dIdx!=null){
+    const g = doorGroups[dIdx];
+    const target = (g.value >= 0.5) ? 0 : 1;
+    tweenDoor(g, target, 500);
+    return;
   }
-  addEventListener('resize', ()=>{ resize(); ensureShadowSystem(); });
-  resize();
+  // Morphs
+  if(assetRoot){
+    const gi = findMorphGroupFromObject(obj);
+    if(gi!=null){
+      const group = animGroups[gi];
+      const probe = group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
+      if(probe){
+        const idx = probe.morphTargetDictionary[group.activeMorph];
+        const cur = probe.morphTargetInfluences[idx] ?? 0;
+        const target = (cur >= 0.5) ? 0 : 1;
+        const start = performance.now();
+        const from = cur;
+        const step = (t)=>{
+          const k = Math.min(1, (t-start)/500);
+          const v = from + (target-from)*k;
+          group.meshes.forEach(m=>{
+            const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return;
+            if(group.activeMorph in d){ inf[d[group.activeMorph]] = v; m.needsUpdate = true; }
+          });
+          if(group.sliderEl) group.sliderEl.value = String(v);
+          if(k<1) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      }
+    }
+  }
+});
 
-  /* ---------- perf update & render loop ---------- */
-  let lastT = performance.now();
-  renderer.setAnimationLoop(()=>{
-    const now = performance.now();
-    const dt = now - lastT; lastT = now;
-    const fpsInst = 1000/dt;
-    fpsEMA = fpsEMA ? (fpsEMA*0.9 + fpsInst*0.1) : fpsInst;
+/* ---------- loading ---------- */
+function loadBlob(file){
+  setUIMode('clean'); setMsg('Loading local file…'); clearModel();
+  const pre = guessModeFromFilename(file.name); if(pre) setUIMode(pre);
+  lastGLBBytes = file.size; statBytes.textContent = `GLB: ${humanBytes(lastGLBBytes)}`;
+  const url = URL.createObjectURL(file);
+  loader.load(url, async (g)=>{
+      place(g.scene, g.animations||[]);
+      await setupVariants(g); // variantes en card
+      setMsg(file.name);
+      URL.revokeObjectURL(url);
+    },
+    undefined, e=>{ console.error(e); setMsg('Error with local file'); });
+}
 
-    const info = renderer.info;
-    document.getElementById('stat-fps').textContent   = `FPS: ${fpsEMA.toFixed(0)}`;
-    document.getElementById('stat-ms').textContent    = `ms: ${dt.toFixed(1)}`;
-    document.getElementById('stat-calls').textContent = `Calls: ${info.render.calls}`;
-    document.getElementById('stat-geoms').textContent = `Geoms: ${info.memory.geometries}`;
-    document.getElementById('stat-text').textContent  = `Tex: ${info.memory.textures}`;
-    document.getElementById('stat-rot').textContent   = `Rotate: ${controls.autoRotate ? 'On' : 'Off'}`;
+/* ---------- UI ---------- */
+const fileInput = document.getElementById('fileInput');
+document.getElementById('fileBtn').onclick = ()=>{ fileInput.value=''; fileInput.click(); };
+fileInput.onchange = ()=>{ const f=fileInput.files?.[0]; if(f) loadBlob(f); };
+document.getElementById('doorsToggle').onchange = e=> {/* room only */};
+document.getElementById('hideCeilingToggle').onchange = e=>{ ceilings.forEach(c=> c.visible = !e.target.checked); };
+document.getElementById('autoRotateToggle').onchange = e=>{ controls.autoRotate = e.target.checked; statRot.textContent = `Rotate: ${e.target.checked?'On':'Off'}`; };
 
-    if(mixer) mixer.update(dt/1000);
+/* ---------- drag & drop ---------- */
+const drop=document.getElementById('drop');
+['dragenter','dragover','dragleave','drop'].forEach(ev=>{
+  window.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); }, false);
+});
+window.addEventListener('dragenter', ()=> drop.style.display='flex');
+window.addEventListener('dragover',  ()=> drop.style.display='flex');
+window.addEventListener('dragleave', e=>{
+  if(e.clientX<=0||e.clientY<=0||e.clientX>=innerWidth||e.clientY>=innerHeight){ drop.style.display='none'; }
+});
+function handleDrop(e){
+  e.preventDefault(); e.stopPropagation();
+  drop.style.display='none';
+  const f=e.dataTransfer?.files?.[0]; if(f) loadBlob(f);
+}
+drop.addEventListener('drop', handleDrop);
 
-    controls.update();
-    ensureShadowSystem();
-    renderer.render(scene,camera);
-  });
-  </script>
+/* ---------- stats toggle (mobile) ---------- */
+const statsEl = document.getElementById('stats');
+const statsToggle = document.getElementById('statsToggle');
+function isMobile(){ return window.matchMedia('(max-width: 640px)').matches; }
+function applyStatsMode(){
+  if(isMobile()){
+    statsEl.classList.remove('open');
+    statsToggle.setAttribute('aria-expanded','false');
+  }else{
+    statsEl.classList.add('open');
+    statsToggle.setAttribute('aria-expanded','true');
+  }
+}
+statsToggle.addEventListener('click', ()=>{ if(!isMobile()) return;
+  const open = statsEl.classList.toggle('open');
+  statsToggle.setAttribute('aria-expanded', open ? 'true':'false');
+});
+addEventListener('resize', applyStatsMode);
+applyStatsMode();
+
+/* ---------- resize & loop ---------- */
+function resize(){
+  const w=innerWidth,h=innerHeight;
+  renderer.setSize(w,h,false);
+  camera.aspect=w/h; camera.updateProjectionMatrix();
+  updateTopbarVar();
+}
+addEventListener('resize', ()=>{ resize(); ensureShadowSystem(); });
+resize();
+
+/* ---------- perf update & render loop ---------- */
+let lastT = performance.now();
+renderer.setAnimationLoop(()=>{
+  const now = performance.now();
+  const dt = now - lastT; lastT = now;
+  const fpsInst = 1000/dt;
+  fpsEMA = fpsEMA ? (fpsEMA*0.9 + fpsInst*0.1) : fpsInst;
+
+  const info = renderer.info;
+  statFPS.textContent   = `FPS: ${fpsEMA.toFixed(0)}`;
+  statMS.textContent    = `ms: ${dt.toFixed(1)}`;
+  statCalls.textContent = `Calls: ${info.render.calls}`;
+  statGeoms.textContent = `Geoms: ${info.memory.geometries}`;
+  statText.textContent  = `Tex: ${info.memory.textures}`;
+  statRot.textContent   = `Rotate: ${controls.autoRotate ? 'On' : 'Off'}`;
+
+  if(mixer) mixer.update(dt/1000);
+
+  controls.update();
+  updateAutoHide();
+  ensureShadowSystem();
+  renderer.render(scene,camera);
+});
+</script>
 </body>
 </html>
