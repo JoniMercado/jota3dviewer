@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Room Viewer — v0.2.6</title>
+<title>Room Viewer — v0.2.5</title>
 
 <script type="importmap">
 {
@@ -37,7 +37,7 @@
   #logo{height:48px;margin-right:12px;border-radius:6px}
   label{display:flex;align-items:center;gap:6px}
 
-  /* Right side panel */
+  /* Right side panel (ACCIONABLES) */
   #sidepanel{
     position:fixed; right:12px; top:12px;
     width:380px; max-height:calc(100% - 24px);
@@ -65,21 +65,16 @@
     font-size:13px;
   }
   .act-row input[type="range"]{ width:200px }
+  .muted{opacity:.7;font-size:12px}
 
-  /* VARIANTES buttons */
-  .variant-list{ display:flex; flex-direction:column; gap:8px; }
-  .variant-btn{
-    width:100%; text-align:left;
-    background:#f5f7fb; border:1px solid #dfe3eb;
-    border-radius:8px; padding:8px 10px;
-    font:inherit; cursor:pointer;
-  }
-  .variant-btn:hover{ background:#eef3ff; border-color:#cfd9ff; }
-  .variant-btn[aria-pressed="true"]{
-    background:#2b7aff; color:#fff; border-color:#2b7aff;
+  /* Select estilo “accionable” */
+  .act-row select{
+    width:200px; padding:6px 8px;
+    border:1px solid #ccc; border-radius:6px;
+    background:#f5f5f5; color:#111; font:inherit;
   }
 
-  /* Bottom stats */
+  /* Bottom stats / performance */
   #stats{
     position:fixed; left:12px; right:12px; bottom:12px;
     background:rgba(255,255,255,.9); backdrop-filter:blur(6px);
@@ -89,7 +84,7 @@
   #stats .tag{background:#f2f4f8;border:1px solid #dfe3eb;border-radius:8px;padding:4px 8px;font-size:12px}
   #stats button{background:#eee;border:1px solid #ccc;border-radius:6px;padding:4px 8px;cursor:pointer}
 
-  /* Performance pill */
+  /* Toggle móvil (pill “Performance”) */
   #statsToggle{
     display:none;
     background:transparent; color:#444; border:1px solid #cfd6e0;
@@ -101,24 +96,14 @@
   #drop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;border:2px dashed #2a2f36;border-radius:16px;background:rgba(30,104,255,.08);color:#1e68ff;pointer-events:auto;z-index:999}
   canvas{display:block;width:100%;height:100%}
 
-  /* ---------- Mobile ---------- */
+  /* ---------- Mobile tweaks ---------- */
   @media (max-width: 640px){
     #logo{height:36px}
     #topbar{ left:8px; top:8px; padding:8px 10px; gap:6px }
 
-    /* NO superponer con el header: anclar debajo del topbar */
-    #sidepanel{ right:8px; top:calc(var(--topbarH) + 8px); width:340px; }
+    #sidepanel{ right:8px; top:8px; width:340px; }
 
-    /* Ocultamos ACCIONABLES en móvil */
-    #animCard{ display:none !important; }
-
-    /* Reducimos el tamaño visual de VARIANTES al 50% */
-    #variantsCard{
-      transform: scale(.5);
-      transform-origin: top right;
-    }
-
-    /* Stats barra inferior */
+    /* Barra inferior móvil */
     #stats{ left:0; right:0; bottom:0; border-radius:0; padding:8px 10px; gap:8px; }
     #statsToggle{ display:inline-flex; align-items:center; color:#333; }
     #statsContent{ display:none; }
@@ -131,6 +116,11 @@
     }
     #stats .tag{ padding:3px 6px; font-size:11px; line-height:1.15 }
     #stats #stats-reset{ padding:3px 6px; font-size:11px }
+
+    /* Ajustes de ACCIONABLES en móvil */
+    .act-row{ grid-template-columns: 1fr 140px; }
+    .act-row input[type="range"]{ width:140px }
+    .act-row select{ width:140px; font-size:12px; padding:5px 6px; }
   }
 </style>
 </head>
@@ -149,25 +139,15 @@
     <small id="msg"></small>
   </div>
 
-  <!-- Side panel -->
+  <!-- Side panel: ACCIONABLES -->
   <div id="sidepanel" style="display:none">
-    <!-- ACCIONABLES -->
     <details id="animCard" class="block card" open style="display:none">
       <summary>ACCIONABLES</summary>
       <div class="panel" id="animPanel"></div>
     </details>
-
-    <!-- VARIANTES (nueva caja) -->
-    <details id="variantsCard" class="block card" open style="display:none">
-      <summary>VARIANTES</summary>
-      <div class="panel">
-        <div id="variantsPanel" class="variant-list"></div>
-        <div id="variantsEmpty" class="muted" style="display:none">Sin variantes</div>
-      </div>
-    </details>
   </div>
 
-  <!-- Bottom stats -->
+  <!-- Bottom stats / performance -->
   <div id="stats">
     <button id="statsToggle" aria-expanded="false">Performance</button>
     <div id="statsContent">
@@ -283,12 +263,11 @@ const objectToGroup = new Map(); // for morph groups
 const objectToDoor  = new Map(); // for door groups
 let lastGLBBytes = null;
 
-/* Variants UI refs */
-const variantsCard   = document.getElementById('variantsCard');
-const variantsPanel  = document.getElementById('variantsPanel');
-const variantsEmpty  = document.getElementById('variantsEmpty');
+/* Variants UI (in-panel) */
+let variantRowEl = null;
+let variantSelectEl = null;
 
-/* ---------- Bottom stats ---------- */
+/* ---------- Bottom stats / performance elements ---------- */
 const statModel = document.getElementById('stat-model');
 const statSize  = document.getElementById('stat-size');
 const statTris  = document.getElementById('stat-tris');
@@ -316,7 +295,6 @@ function setUIMode(mode){
     if(autoH) autoH.style.display = 'none';
     if(ceil)  ceil.style.display  = 'none';
     side.style.display = 'none';
-    variantsCard.style.display = 'none';
     removeShadowSystem();
     return;
   }
@@ -327,9 +305,8 @@ function setUIMode(mode){
 
   side.style.display = isAsset ? '' : 'none';
   animCard.style.display = isAsset ? '' : 'none';
-  variantsCard.style.display = 'none'; // se muestra sólo si hay variantes
-
   if(!isAsset) removeShadowSystem();
+
   updateTopbarVar();
 }
 setUIMode('clean');
@@ -350,10 +327,9 @@ function clearModel(){
   statBytes.textContent = 'GLB: —';
   mixer = null;
 
-  // limpiar variantes UI
-  variantsPanel.innerHTML = '';
-  variantsEmpty.style.display = 'none';
-  variantsCard.style.display = 'none';
+  // limpiar UI de variantes
+  if (variantRowEl?.parentNode) variantRowEl.parentNode.removeChild(variantRowEl);
+  variantRowEl = null; variantSelectEl = null;
 }
 function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geometry; t += g?.index ? g.index.count/3 : (g?.attributes?.position?.count||0)/3; }}); return Math.round(t); }
 function updateStats(sizeVec){
@@ -403,7 +379,7 @@ function reparentKeepWorld(child, newParent){
   child.updateMatrixWorld(true);
 }
 
-/* ---------- puertas (rooms) ---------- */
+/* ---------- puertas (rooms) — estático ---------- */
 function findDoorPanels(nodes){
   const panels = nodes.filter(o => /(leftpanel|rightpanel)\d+$/i.test(o.name) && !/_open|_closed/i.test(o.name));
   return panels.map(o=>{
@@ -423,11 +399,13 @@ function findDoorVariantPairs(nodes){
     if(!m) return;
     const state = m[1].toLowerCase();
     const side  = m[2].toLowerCase();
-    const idx   = m[3];
-    const group = doorGroupKey(o.name);
-    const key   = `${group}|${side}|${idx}`;
-    if(!map.has(key)) map.set(key, { open:null, closed:null, group, side, idx });
-    map.get(key)[state] = o;
+    theIdx: {
+      const idx   = m[3];
+      const group = doorGroupKey(o.name);
+      const key   = `${group}|${side}|${idx}`;
+      if(!map.has(key)) map.set(key, { open:null, closed:null, group, side, idx });
+      map.get(key)[state] = o;
+    }
   });
   return Array.from(map.values()).filter(p => p.open || p.closed);
 }
@@ -487,4 +465,527 @@ function reparentHardwareToDoors(nodes, _doorPanels){
       candidates.forEach(d=>{
         const dp = new THREE.Vector3(); new THREE.Box3().setFromObject(d).getCenter(dp);
         const dist = hp.distanceTo(dp);
-        if(dist<bes
+        if(dist<bestDist){ bestDist=dist; best=d; }
+      });
+      target = best;
+    }
+
+    if(target && h.parent !== target) reparentKeepWorld(h, target);
+  });
+}
+function enforceDoorVariantExclusivity(defaultState='closed'){
+  doorVariantPairs.forEach(({open, closed})=>{
+    if(open && closed){
+      open.visible   = (defaultState === 'open');
+      closed.visible = (defaultState === 'closed');
+    }else if(open){
+      open.visible = (defaultState === 'open');
+    }else if(closed){
+      closed.visible = (defaultState === 'closed');
+    }
+  });
+}
+
+/* ---------- Asset UI (morphs) ---------- */
+function removeAssetUI(){
+  animGroups = [];
+  const panel = document.getElementById('animPanel');
+  if(panel) panel.innerHTML = '';
+}
+function collectMorphMeshes(root){
+  const out = [];
+  root.traverse(o=>{ if(o.isMesh && o.morphTargetInfluences && o.morphTargetDictionary){ out.push(o); }});
+  return out;
+}
+function uniqueNamesFromMeshes(meshes){
+  const set = new Set();
+  meshes.forEach(m=>{ const d=m.morphTargetDictionary; if(!d) return; Object.keys(d).forEach(k=>set.add(k)); });
+  return Array.from(set);
+}
+function findAnimRoots(asset){
+  const arr=[]; asset.traverse(o=>{ if(o!==asset && o.name && /^anim_/i.test(o.name)) arr.push(o); });
+  return arr;
+}
+function stripAnimPrefix(s){ return s?.replace(/^anim_/i,'') ?? s; }
+
+/* ---------- Doors from clips ---------- */
+function removeDoorUI(){ doorGroups = []; }
+function buildDoorControlsFromClips(root, clips){
+  if(!clips?.length) return;
+  const panel = document.getElementById('animPanel');
+  if(!panel) return;
+
+  clips
+    .filter(c => /^door_/i.test(c.name))
+    .forEach((clip)=>{
+      const track = clip.tracks[0];
+      if(!track) return;
+
+      if(!mixer) mixer = new THREE.AnimationMixer(root);
+      const action = mixer.clipAction(clip);
+      action.clampWhenFinished = true;
+      action.enabled = true;
+      action.play();
+      action.paused = true;
+      action.time   = 0;
+
+      const pathFull = track.name.split('.')[0];
+      const pathBase = pathFull.split('/').pop();
+
+      let targetNode = null;
+      root.traverse(o=>{ if(!targetNode && o.name === pathBase) targetNode = o; });
+      if(!targetNode) targetNode = root;
+
+      targetNode.traverse(n=> objectToDoor.set(n, doorGroups.length));
+
+      doorGroups.push({
+        name: stripDoorPrefix(targetNode.name),
+        clip, action, node: targetNode,
+        duration: clip.duration, value: 0, slider: null
+      });
+    });
+
+  renderActionsPanel();
+}
+function renderActionsPanel(){
+  const panel = document.getElementById('animPanel');
+  if(!panel) return;
+  panel.innerHTML = '';
+
+  // Puertas
+  doorGroups.forEach((g)=>{
+    const row = document.createElement('div'); row.className='act-row';
+    const name = document.createElement('div'); name.textContent = g.name; row.appendChild(name);
+    const slider = document.createElement('input'); slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.01'; slider.value=String(g.value);
+    slider.oninput = ()=> setDoorValue(g, parseFloat(slider.value));
+    row.appendChild(slider); g.slider = slider;
+    panel.appendChild(row);
+  });
+
+  // Morphs
+  if(!assetRoot){
+    document.getElementById('animCard').style.display='none';
+    return;
+  }
+  const animRoots = findAnimRoots(assetRoot);
+  const groups = [];
+  objectToGroup.clear();
+
+  animRoots.forEach((ar, gi)=>{
+    const meshes = collectMorphMeshes(ar); if(!meshes.length) return;
+    const morphNames = uniqueNamesFromMeshes(meshes); if(!morphNames.length) return;
+    ar.traverse(n=>{ objectToGroup.set(n, gi); });
+    groups.push({ name: ar.name, node: ar, meshes, morphNames, activeMorph: morphNames[0], sliderEl:null, selectEl:null, tween:null });
+  });
+  animGroups = groups;
+
+  animGroups.forEach(group=>{
+    const row = document.createElement('div'); row.className='act-row';
+    const label = document.createElement('div'); label.textContent = stripAnimPrefix(group.name); row.appendChild(label);
+
+    const slider = document.createElement('input'); slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.01'; slider.value='0';
+    slider.oninput=()=>{ const val=parseFloat(slider.value);
+      group.meshes.forEach(m=>{ const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return;
+        if(group.activeMorph in d){ inf[d[group.activeMorph]]=val; m.needsUpdate=true; }
+      });
+    };
+    row.appendChild(slider); group.sliderEl=slider;
+    panel.appendChild(row);
+  });
+
+  document.getElementById('animCard').style.display='';
+}
+function setDoorValue(group, value){
+  group.value = THREE.MathUtils.clamp(value, 0, 1);
+  if(!group.action) return;
+  group.action.paused = true;
+  group.action.time   = group.duration * group.value;
+  group.action.syncWith(group.action);
+  if(group.slider) group.slider.value = String(group.value);
+}
+function tweenDoor(group, toValue, durationMs=500){
+  const from = group.value ?? 0;
+  const start = performance.now();
+  const step = (t)=>{
+    const k = Math.min(1, (t-start)/durationMs);
+    const v = from + (toValue-from)*k;
+    setDoorValue(group, v);
+    if(k<1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+/* ---------- Sombras suaves (shadow catcher) ---------- */
+function setCastShadow(obj, val){ obj.traverse(o=>{ if(o.isMesh){ o.castShadow = !!val; }}); }
+function ensureShadowSystem(){
+  if(!assetRoot) return;
+
+  if(!dirLight){
+    dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(2048,2048);
+    dirLight.shadow.bias = -0.00015;
+    dirLight.shadow.normalBias = 0.015;
+    scene.add(dirLight);
+  }
+  if(!shadowPlane){
+    const mat = new THREE.ShadowMaterial({ opacity: 0.07 });
+    const geo = new THREE.PlaneGeometry(1,1);
+    shadowPlane = new THREE.Mesh(geo, mat);
+    shadowPlane.rotation.x = -Math.PI/2;
+    shadowPlane.receiveShadow = true;
+    shadowPlane.renderOrder = -1;
+    scene.add(shadowPlane);
+  }
+
+  const box = new THREE.Box3().setFromObject(assetRoot);
+  const size= box.getSize(new THREE.Vector3());
+  const ctr = box.getCenter(new THREE.Vector3());
+
+  shadowPlane.position.set(ctr.x, box.min.y + 0.0001, ctr.z);
+  shadowPlane.scale.set(size.x*1.05, size.z*1.05, 1);
+
+  const dir = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
+  const elev = 0.9;
+  const lateral = 0.25;
+  dirLight.position.set(ctr.x + dir.x*size.x*lateral, box.max.y + size.y*1.4*elev, ctr.z + dir.z*size.z*lateral);
+  dirLight.target.position.set(ctr.x, ctr.y, ctr.z);
+  scene.add(dirLight.target);
+
+  dirLight.shadow.radius = 4.0;
+
+  const cam = dirLight.shadow.camera;
+  const r = Math.max(size.x, size.z) * 0.65;
+  cam.left=-r; cam.right=r; cam.top=r; cam.bottom=-r; cam.near=0.1; cam.far=size.y * 4.0;
+  cam.updateProjectionMatrix();
+
+  setCastShadow(assetRoot, true);
+}
+function removeShadowSystem(){
+  if(shadowPlane){
+    shadowPlane.geometry.dispose(); shadowPlane.material.dispose();
+    scene.remove(shadowPlane); shadowPlane=null;
+  }
+  if(dirLight){
+    scene.remove(dirLight.target);
+    scene.remove(dirLight);
+    dirLight = null;
+  }
+}
+
+/* ---------- Variants (KHR_materials_variants) - en panel ---------- */
+async function setupVariants(gltf){
+  // limpiar UI previa
+  if (variantRowEl?.parentNode) variantRowEl.parentNode.removeChild(variantRowEl);
+  variantRowEl = null; variantSelectEl = null;
+
+  const parser = gltf.parser;
+  const json   = parser.json;
+  const rootExt = json.extensions && json.extensions.KHR_materials_variants;
+  if(!rootExt || !rootExt.variants || !rootExt.variants.length) return;
+
+  const variantNames = rootExt.variants.map(v => v.name);
+
+  // cache materiales
+  const matCache = new Map();
+  const getMaterialByIndex = (i) => {
+    if (!matCache.has(i)) matCache.set(i, parser.getDependency('material', i));
+    return matCache.get(i);
+  };
+
+  // guardar material original
+  gltf.scene.traverse(o => {
+    if (o.isMesh && o.material && !o.userData._origMaterial) {
+      o.userData._origMaterial = o.material;
+    }
+  });
+
+  async function applyVariant(root, name){
+    const nameToIdx = new Map(rootExt.variants.map((v, i) => [v.name, i]));
+    const wantedIdx = nameToIdx.get(name);
+    if (wantedIdx == null) return;
+
+    const pending = [];
+    root.traverse(obj => {
+      if (!obj.isMesh) return;
+      const ext = obj.userData?.gltfExtensions?.KHR_materials_variants;
+      if (!ext || !ext.mappings) {
+        if (obj.userData._origMaterial) obj.material = obj.userData._origMaterial;
+        return;
+      }
+      let chosen = null;
+      for (const m of ext.mappings) {
+        if (m.variants?.includes(wantedIdx)) { chosen = m; break; }
+      }
+      if (chosen && typeof chosen.material === 'number') {
+        pending.push(getMaterialByIndex(chosen.material).then(mat => { obj.material = mat; }));
+      } else {
+        if (obj.userData._origMaterial) obj.material = obj.userData._origMaterial;
+      }
+    });
+    await Promise.all(pending);
+  }
+
+  // asegurar panel visible
+  document.getElementById('animCard').style.display = '';
+
+  // construir fila
+  const panel = document.getElementById('animPanel');
+  const row   = document.createElement('div'); row.className = 'act-row';
+  const label = document.createElement('div'); label.textContent = 'Material';
+  const select = document.createElement('select');
+
+  variantNames.forEach((n, i)=>{
+    const opt = document.createElement('option');
+    opt.value = n; opt.textContent = n;
+    if (i===0) opt.selected = true;
+    select.appendChild(opt);
+  });
+
+  row.appendChild(label);
+  row.appendChild(select);
+  panel.appendChild(row);
+
+  variantRowEl   = row;
+  variantSelectEl= select;
+
+  await applyVariant(gltf.scene, variantNames[0]);
+  select.onchange = async ()=> { await applyVariant(gltf.scene, select.value); };
+}
+
+/* ---------- placing ---------- */
+function place(root, clips){
+  root.traverse(o=>{
+    if(o.isMesh && /collider/i.test(o.name)) o.visible=false;
+    if(o.isMesh && /^ceiling\d*$/i.test(o.name)) o.visible=false;
+  });
+
+  new THREE.Box3().setFromObject(root).getCenter(root.position).multiplyScalar(-1);
+  const box  = new THREE.Box3().setFromObject(root);
+  const size = box.getSize(new THREE.Vector3());
+  root.position.y -= box.min.y;
+
+  allNodes = []; root.traverse(o=>{ if(o.name) allNodes.push(o); });
+  ceilings  = allNodes.filter(o => /^ceiling\d*$/i.test(o.name));
+  wallRoots = allNodes.filter(o => /^wall\d+$/i.test(o.name));
+
+  doorPanels       = findDoorPanels(allNodes);
+  doorVariantPairs = findDoorVariantPairs(allNodes);
+  enforceDoorVariantExclusivity('closed');
+  reparentHardwareToDoors(allNodes, doorPanels);
+
+  current = root; scene.add(root);
+
+  assetRoot = null;
+  current.traverse(o=>{ if(!assetRoot && o.name && /^model_/i.test(o.name)) assetRoot = o; });
+
+  setUIMode(assetRoot ? 'asset' : 'room');
+  removeDoorUI();
+  if(assetRoot){
+    buildDoorControlsFromClips(current, clips||[]);
+    renderActionsPanel();
+    ensureShadowSystem();
+  } else {
+    removeAssetUI(); removeShadowSystem(); objectToGroup.clear(); objectToDoor.clear();
+  }
+
+  mixer = mixer || new THREE.AnimationMixer(current);
+
+  const maxDim = Math.max(size.x,size.y,size.z);
+  camera.position.setScalar(maxDim*1.6).setY(maxDim*0.8);
+  controls.target.copy(new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3()));
+  controls.update();
+
+  statModel.textContent = `Model: ${root.name || '(scene)'}`;
+  updateStats(size);
+  updateTopbarVar();
+}
+
+/* ---------- auto-hide wall (rooms) ---------- */
+const ray = new THREE.Raycaster();
+function wallRootOf(obj){ let p=obj; while(p){ if(/^wall\d+$/i.test(p.name)) return p; p=p.parent; } return null; }
+function sampleFrontWalls(){
+  if(!wallRoots?.length) return new Set();
+  let closest=null, closestDist=Infinity;
+  const distToTarget = camera.position.distanceTo(controls.target);
+  const samples=[{x:0,y:0},{x:0.14,y:0},{x:-0.14,y:0},{x:0,y:0.14},{x:0,y:-0.14}];
+  for(const ndc of samples){
+    ray.setFromCamera(ndc, camera);
+    const hits = ray.intersectObjects(wallRoots, true);
+    if(hits.length){
+      const h = hits[0];
+      if(h.distance < distToTarget*0.995 && h.distance < closestDist){
+        closest = wallRootOf(h.object); closestDist = h.distance;
+      }
+    }
+  }
+  return closest ? new Set([closest]) : new Set();
+}
+function updateAutoHide(){
+  const autoHToggle=document.getElementById('autoHideToggle');
+  if(!autoHToggle || autoHToggle.closest('label').style.display==='none') return;
+  if(!autoHToggle.checked || !current) return;
+  const front = sampleFrontWalls();
+  for(const wr of Array.from(lastHiddenWalls)){ if(!front.has(wr)){ wr.visible=true; lastHiddenWalls.delete(wr);} }
+  for(const wr of front){ if(!lastHiddenWalls.has(wr)){ wr.visible=false; lastHiddenWalls.add(wr);} }
+}
+
+/* ---------- Clicks (morphs y puertas) ---------- */
+const mouse = new THREE.Vector2();
+let downPos = null;
+function screenToNDC(e){
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+}
+function findMorphGroupFromObject(obj){
+  let p=obj; while(p){ if(objectToGroup.has(p)) return objectToGroup.get(p); p=p.parent; } return null;
+}
+function findDoorGroupFromObject(obj){
+  let p=obj; while(p){ if(objectToDoor.has(p)) return objectToDoor.get(p); p=p.parent; } return null;
+}
+canvas.addEventListener('pointerdown', (e)=>{ downPos = {x:e.clientX,y:e.clientY}; });
+canvas.addEventListener('pointerup', (e)=>{
+  if(controls.dragging) return;
+  if(downPos && (Math.hypot(e.clientX-downPos.x, e.clientY-downPos.y) > 3)) return;
+
+  const rect = renderer.domElement.getBoundingClientRect();
+  if(e.clientY < rect.top + (topbar?.offsetHeight||0)) return;
+
+  screenToNDC(e);
+  ray.setFromCamera(mouse, camera);
+  const intersects = ray.intersectObject(current ?? scene, true);
+  if(!intersects.length) return;
+
+  const obj = intersects[0].object;
+
+  const dIdx = findDoorGroupFromObject(obj);
+  if(dIdx!=null){
+    const g = doorGroups[dIdx];
+    const target = (g.value >= 0.5) ? 0 : 1;
+    tweenDoor(g, target, 500);
+    return;
+  }
+  if(assetRoot){
+    const gi = findMorphGroupFromObject(obj);
+    if(gi!=null){
+      const group = animGroups[gi];
+      const probe = group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
+      if(probe){
+        const idx = probe.morphTargetDictionary[group.activeMorph];
+        const cur = probe.morphTargetInfluences[idx] ?? 0;
+        const target = (cur >= 0.5) ? 0 : 1;
+        const start = performance.now();
+        const from = cur;
+        const step = (t)=>{
+          const k = Math.min(1, (t-start)/500);
+          const v = from + (target-from)*k;
+          group.meshes.forEach(m=>{
+            const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return;
+            if(group.activeMorph in d){ inf[d[group.activeMorph]] = v; m.needsUpdate = true; }
+          });
+          if(group.sliderEl) group.sliderEl.value = String(v);
+          if(k<1) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      }
+    }
+  }
+});
+
+/* ---------- loading ---------- */
+function loadBlob(file){
+  setUIMode('clean'); setMsg('Loading local file…'); clearModel();
+  const pre = guessModeFromFilename(file.name); if(pre) setUIMode(pre);
+  lastGLBBytes = file.size; statBytes.textContent = `GLB: ${humanBytes(lastGLBBytes)}`;
+  const url = URL.createObjectURL(file);
+  loader.load(url, async (g)=>{
+      place(g.scene, g.animations||[]);
+      await setupVariants(g); // variantes en panel
+      setMsg(file.name);
+      URL.revokeObjectURL(url);
+    },
+    undefined, e=>{ console.error(e); setMsg('Error with local file'); });
+}
+
+/* ---------- UI ---------- */
+const fileInput = document.getElementById('fileInput');
+document.getElementById('fileBtn').onclick = ()=>{ fileInput.value=''; fileInput.click(); };
+fileInput.onchange = ()=>{ const f=fileInput.files?.[0]; if(f) loadBlob(f); };
+document.getElementById('doorsToggle').onchange = e=> {/* room only */};
+document.getElementById('hideCeilingToggle').onchange = e=>{ ceilings.forEach(c=> c.visible = !e.target.checked); };
+document.getElementById('autoRotateToggle').onchange = e=>{ controls.autoRotate = e.target.checked; statRot.textContent = `Rotate: ${e.target.checked?'On':'Off'}`; };
+
+/* ---------- drag & drop ---------- */
+const drop=document.getElementById('drop');
+['dragenter','dragover','dragleave','drop'].forEach(ev=>{
+  window.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); }, false);
+});
+window.addEventListener('dragenter', ()=> drop.style.display='flex');
+window.addEventListener('dragover',  ()=> drop.style.display='flex');
+window.addEventListener('dragleave', e=>{
+  if(e.clientX<=0||e.clientY<=0||e.clientX>=innerWidth||e.clientY>=innerHeight){ drop.style.display='none'; }
+});
+function handleDrop(e){
+  e.preventDefault(); e.stopPropagation();
+  drop.style.display='none';
+  const f=e.dataTransfer?.files?.[0]; if(f) loadBlob(f);
+}
+drop.addEventListener('drop', handleDrop);
+
+/* ---------- stats toggle (mobile) ---------- */
+const statsEl = document.getElementById('stats');
+const statsToggle = document.getElementById('statsToggle');
+function isMobile(){ return window.matchMedia('(max-width: 640px)').matches; }
+function applyStatsMode(){
+  if(isMobile()){
+    statsEl.classList.remove('open');
+    statsToggle.setAttribute('aria-expanded','false');
+  }else{
+    statsEl.classList.add('open');
+    statsToggle.setAttribute('aria-expanded','true');
+  }
+}
+statsToggle.addEventListener('click', ()=>{ if(!isMobile()) return;
+  const open = statsEl.classList.toggle('open');
+  statsToggle.setAttribute('aria-expanded', open ? 'true':'false');
+});
+addEventListener('resize', applyStatsMode);
+applyStatsMode();
+
+/* ---------- resize & loop ---------- */
+function resize(){
+  const w=innerWidth,h=innerHeight;
+  renderer.setSize(w,h,false);
+  camera.aspect=w/h; camera.updateProjectionMatrix();
+  updateTopbarVar();
+}
+addEventListener('resize', ()=>{ resize(); ensureShadowSystem(); });
+resize();
+
+/* ---------- perf update & render loop ---------- */
+let lastT = performance.now();
+renderer.setAnimationLoop(()=>{
+  const now = performance.now();
+  const dt = now - lastT; lastT = now;
+  const fpsInst = 1000/dt;
+  fpsEMA = fpsEMA ? (fpsEMA*0.9 + fpsInst*0.1) : fpsInst;
+
+  const info = renderer.info;
+  statFPS.textContent   = `FPS: ${fpsEMA.toFixed(0)}`;
+  statMS.textContent    = `ms: ${dt.toFixed(1)}`;
+  statCalls.textContent = `Calls: ${info.render.calls}`;
+  statGeoms.textContent = `Geoms: ${info.memory.geometries}`;
+  statText.textContent  = `Tex: ${info.memory.textures}`;
+  statRot.textContent   = `Rotate: ${controls.autoRotate ? 'On' : 'Off'}`;
+
+  if(mixer) mixer.update(dt/1000);
+
+  controls.update();
+  updateAutoHide();
+  ensureShadowSystem();
+  renderer.render(scene,camera);
+});
+</script>
+</body>
+</html>
