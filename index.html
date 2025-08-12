@@ -197,23 +197,6 @@ addEventListener('load', updateTopbarVar);
 addEventListener('resize', updateTopbarVar);
 
 /* ---------- password gate ---------- */
-const VIEWER_PASSWORD = 'demo';
-const gate   = document.getElementById('gate');
-const gInput = document.getElementById('gateInput');
-const gBtn   = document.getElementById('gateBtn');
-const gMsg   = document.getElementById('gateMsg');
-function passOK(p){
-  const urlKey = new URLSearchParams(location.search).get('key');
-  return (p && p === VIEWER_PASSWORD) || (urlKey && urlKey === VIEWER_PASSWORD);
-}
-function unlock(){ gate.style.display = 'none'; localStorage.setItem('viewer_ok','1'); }
-(function initGate(){
-  if(localStorage.getItem('viewer_ok') === '1' || passOK(null)){ unlock(); }
-  else{
-    gBtn?.addEventListener('click', ()=>{ if(passOK(gInput.value)) unlock(); else gMsg.textContent='Password incorrecta'; });
-    gInput?.addEventListener('keydown', (e)=>{ if(e.key==='Enter') gBtn.click(); });
-  }
-})();
 
 /* ---------- renderer / scene / camera ---------- */
 const canvas   = document.getElementById('c');
