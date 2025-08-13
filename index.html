@@ -16,11 +16,11 @@
 
 <style>
   :root{
-    --topbarH:72px;
-    --stackGap:8px;
-    --padCard:10px 12px;
+    --topbarH:72px;         /* se actualiza por JS */
+    --stackGap:8px;         /* separación vertical estándar en móvil */
+    --padCard:10px 12px;    /* padding por defecto de cards */
     --radiusCard:12px;
-    --edgeGap:8px;
+    --edgeGap:8px;          /* margen lateral en móvil */
   }
 
   html,body{height:100%;margin:0}
@@ -35,7 +35,7 @@
     display:inline-flex; gap:8px; flex-wrap:wrap; align-items:center;
     background:rgba(255,255,255,.85); backdrop-filter:blur(6px);
     border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:10px 12px; z-index:10;
-    width:max-content; max-width:calc(100vw - 24px);
+    width:max-content; max-width:calc(100vw - 24px);  /* escritorio */
   }
   #topbar button{background:#1e68ff;border:none;color:white;padding:6px 10px;border-radius:6px;cursor:pointer}
   #topbar small{opacity:.7}
@@ -82,24 +82,28 @@
   #variantsCard{ z-index:9 }
   #variantsPanel .act-row{ margin-top:6px }
 
-  /* Swatches (mobile) */
-  #mobileVariants{ display:none; }
-  #mobileVariants .swatches{
-    display:flex; gap:10px; align-items:center; justify-content:center;
+  /* Swatches móviles (sin card) */
+  #variantSwatches{
+    display:none; /* se activa solo en móvil cuando hay variantes */
+    position:fixed; left:var(--edgeGap); right:var(--edgeGap);
+    top:calc(var(--stackGap) + var(--topbarH) + var(--stackGap));
+    z-index:9;
+    background:rgba(255,255,255,.9); backdrop-filter:blur(6px);
+    border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:6px 8px;
+    display:flex; gap:10px; align-items:center; overflow:auto;
   }
   .swatch{
-    width:32px; height:32px; border-radius:50%;
-    border:1px solid rgba(0,0,0,.2);
-    box-shadow:0 1px 2px rgba(0,0,0,.08) inset;
-    cursor:pointer; outline:none;
-    background-size:cover; background-position:center; background-repeat:no-repeat;
+    width:36px; height:36px; min-width:36px; min-height:36px;
+    border-radius:999px; border:2px solid rgba(0,0,0,.12);
+    box-shadow:0 1px 3px rgba(0,0,0,.15);
+    background-position:center; background-size:cover; background-repeat:no-repeat;
+    cursor:pointer; outline: none;
   }
-  .swatch[aria-pressed="true"]{
-    box-shadow:0 0 0 2px #2b7aff, 0 1px 2px rgba(0,0,0,.08) inset;
-    border-color:#2b7aff;
+  .swatch[aria-selected="true"]{
+    border-color:#1e68ff; box-shadow:0 0 0 3px rgba(30,104,255,.18);
   }
 
-  /* Bottom stats */
+  /* Bottom stats / performance */
   #stats{
     position:fixed; left:12px; right:12px; bottom:12px;
     background:rgba(255,255,255,.9); backdrop-filter:blur(6px);
@@ -107,7 +111,8 @@
     display:flex; flex-wrap:wrap; align-items:center; gap:10px; z-index:5
   }
   #stats .tag{background:#f2f4f8;border:1px solid #dfe3eb;border-radius:8px;padding:4px 8px;font-size:12px}
-  #stats button{background:#eee;border:1px solid #ccc;border-radius:6px;padding:4px 8px;cursor:pointer}
+  #stats button{background:#eee;border:1px solid #ccc;border-radius:999px;padding:6px 12px;cursor:pointer; display:inline-flex; align-items:center; gap:8px;}
+  #fileLabel{ font-size:12px; opacity:.7; max-width:40vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
   #drop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;border:2px dashed #2a2f36;border-radius:16px;background:rgba(30,104,255,.08);color:#1e68ff;pointer-events:auto;z-index:999}
   canvas{display:block;width:100%;height:100%}
@@ -118,31 +123,26 @@
 
     #logo{height:36px}
 
-    /* Topbar en móvil: márgenes simétricos */
+    /* Topbar: márgenes simétricos y auto-ajuste de ancho */
     #topbar{
       left:var(--edgeGap); right:var(--edgeGap); top:var(--stackGap);
-      width:auto; max-width:unset; border-radius:12px;
+      width:auto; max-width:unset;
+      border-radius:12px;
       display:flex; flex-wrap:wrap; gap:8px;
     }
 
-    /* Ocultar ACCIONABLES y card de variantes; usar swatches */
+    /* Ocultar ACCIONABLES en móvil */
     #animCard{ display:none !important; }
+
+    /* Select dentro de VARIANTES (desktop) no se usa en móvil */
     #variantsCard{ display:none !important; }
 
-    /* Swatches móviles: debajo del topbar con mismos márgenes */
-    #mobileVariants{
-      display:block;
-      position:fixed;
-      left:var(--edgeGap); right:var(--edgeGap);
-      top:calc(var(--stackGap) + var(--topbarH) + var(--stackGap));
-      background:rgba(255,255,255,.9); backdrop-filter:blur(6px);
-      border:1px solid rgba(0,0,0,.08); border-radius:12px;
-      padding:8px 10px; z-index:9;
-    }
+    /* Swatches se muestran en móvil */
+    #variantSwatches{ display:flex; }
 
     /* Barra inferior móvil */
-    #stats{ left:0; right:0; bottom:0; border-radius:0; padding:8px 10px; gap:8px; }
-    #statsToggle{ display:inline-flex; align-items:center; color:#333; background:transparent; border:1px solid #cfd6e0; border-radius:999px; padding:6px 12px; font-weight:600; cursor:pointer; }
+    #stats{ left:var(--edgeGap); right:var(--edgeGap); bottom:var(--edgeGap); border-radius:12px; padding:8px 10px; gap:8px; }
+    #statsToggle{ display:inline-flex; }
     #statsContent{ display:none; }
     #stats.open #statsContent{
       display:grid; grid-template-columns: repeat(4, auto); column-gap:6px; row-gap:4px; align-items:center;
@@ -155,7 +155,7 @@
 <body>
   <!-- Top row -->
   <div id="topbar">
-    <img id="logo" src="jota 3d.jpg" alt="Logo">
+    <img id="logo" src="https://jonimercado.github.io/threejs-viewer/jota%203d.jpg" alt="Logo">
     <button id="fileBtn">Open .glb/.gltf</button>
     <input type="file" id="fileInput" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" />
     <!-- Rooms controls (ocultos cuando es asset) -->
@@ -165,11 +165,6 @@
     <!-- Global -->
     <label><input type="checkbox" id="autoRotateToggle"> Auto-rotate</label>
     <small id="msg"></small>
-  </div>
-
-  <!-- Tira de variantes (solo móvil) -->
-  <div id="mobileVariants" aria-label="Variants" style="display:none">
-    <div class="swatches" id="mobileSwatches"></div>
   </div>
 
   <!-- Side panel: ACCIONABLES + VARIANTES (desktop) -->
@@ -190,9 +185,15 @@
     </details>
   </div>
 
-  <!-- Bottom stats -->
+  <!-- Swatches móviles -->
+  <div id="variantSwatches" aria-label="Variants" style="display:none"></div>
+
+  <!-- Bottom stats / performance -->
   <div id="stats">
-    <button id="statsToggle" aria-expanded="false" style="display:none">Performance</button>
+    <button id="statsToggle" aria-expanded="false" style="display:none">
+      <span>Performance</span>
+      <small id="fileLabel"></small>
+    </button>
     <div id="statsContent">
       <span class="tag" id="stat-model">Model: —</span>
       <span class="tag" id="stat-size">Size: —</span>
@@ -232,8 +233,11 @@ import { RoomEnvironment }from 'three/addons/environments/RoomEnvironment.js';
 /* ---------- layout helper ---------- */
 const topbar = document.getElementById('topbar');
 const variantsCard = document.getElementById('variantsCard');
-const mobileVariants = document.getElementById('mobileVariants');
-const mobileSwatches = document.getElementById('mobileSwatches');
+const variantSelect = document.getElementById('variantSelect');
+const variantSwatches = document.getElementById('variantSwatches');
+const fileLabel = document.getElementById('fileLabel');
+
+function isMobile(){ return window.matchMedia('(max-width: 640px)').matches; }
 
 function updateTopbarVar(){
   const h = topbar?.offsetHeight || 72;
@@ -242,11 +246,6 @@ function updateTopbarVar(){
 new ResizeObserver(updateTopbarVar).observe(topbar);
 addEventListener('load', updateTopbarVar);
 addEventListener('resize', updateTopbarVar);
-
-/* breakpoint helper */
-const mql = window.matchMedia('(max-width: 640px)');
-const isMobile = ()=> mql.matches;
-mql.addEventListener('change', placeVariantsForViewport);
 
 /* ---------- password gate ---------- */
 const VIEWER_PASSWORD = 'demo';
@@ -315,12 +314,10 @@ const objectToGroup = new Map(); // for morph groups
 const objectToDoor  = new Map(); // for door groups
 let lastGLBBytes = null;
 
-/* Variants UI refs */
-const variantSelect = document.getElementById('variantSelect');
-variantsCard.dataset.hasVariants = '0';
-let applyVariantRef = null;
+/* Variants state */
+let hasVariants = false;
 
-/* ---------- Bottom stats ---------- */
+/* ---------- Bottom stats / performance elements ---------- */
 const statModel = document.getElementById('stat-model');
 const statSize  = document.getElementById('stat-size');
 const statTris  = document.getElementById('stat-tris');
@@ -349,25 +346,31 @@ function setUIMode(mode){
     if(ceil)  ceil.style.display  = 'none';
     side.style.display = 'none';
     removeShadowSystem();
-    mobileVariants.style.display = 'none';
-    return;
+  }else{
+    const isAsset = (mode === 'asset');
+    if(doors) doors.style.display = isAsset ? 'none' : '';
+    if(autoH) autoH.style.display = isAsset ? 'none' : '';
+    if(ceil)  ceil.style.display  = isAsset ? 'none' : '';
+    side.style.display = isAsset ? '' : 'none';
+    animCard.style.display = isAsset ? '' : 'none';
+    if(!isAsset) removeShadowSystem();
   }
-  const isAsset = (mode === 'asset');
-  if(doors) doors.style.display = isAsset ? 'none' : '';
-  if(autoH) autoH.style.display = isAsset ? 'none' : '';
-  if(ceil)  ceil.style.display  = isAsset ? 'none' : '';
-
-  side.style.display = isAsset ? '' : 'none';
-  animCard.style.display = isAsset ? '' : 'none';
-  if(!isAsset) removeShadowSystem();
-
   updateTopbarVar();
-  placeVariantsForViewport();
 }
 setUIMode('clean');
 
 /* ---------- helpers ---------- */
-function setMsg(t){ document.getElementById('msg').textContent = t || ''; }
+function truncate(str, n=18){ if(!str) return ''; return (str.length>n)? (str.slice(0,n-1)+'…') : str; }
+function setMsg(t){
+  const msgEl = document.getElementById('msg');
+  if(isMobile()){
+    msgEl.textContent = '';             // no en topbar móvil
+    fileLabel.textContent = t ? '· ' + truncate(t, 22) : '';
+  }else{
+    msgEl.textContent = t || '';
+    fileLabel.textContent = '';
+  }
+}
 function disposeMat(m){ ['map','normalMap','roughnessMap','metalnessMap','occlusionMap','emissiveMap'].forEach(k=>m[k]?.dispose?.()); }
 function clearModel(){
   if(!current) return;
@@ -382,13 +385,12 @@ function clearModel(){
   statBytes.textContent = 'GLB: —';
   mixer = null;
 
-  // limpiar UI variantes
+  // limpiar variantes UI
+  hasVariants = false;
   variantSelect.innerHTML = '';
   variantsCard.style.display = 'none';
-  mobileVariants.style.display = 'none';
-  mobileSwatches.innerHTML = '';
-  variantsCard.dataset.hasVariants = '0';
-  applyVariantRef = null;
+  variantSwatches.innerHTML = '';
+  variantSwatches.style.display = 'none';
 }
 function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geometry; t += g?.index ? g.index.count/3 : (g?.attributes?.position?.count||0)/3; }}); return Math.round(t); }
 function updateStats(sizeVec){
@@ -439,7 +441,6 @@ function reparentKeepWorld(child, newParent){
 }
 
 /* ---------- puertas (rooms) — estático ---------- */
-// (… sin cambios: findDoorPanels, findDoorVariantPairs, etc.)
 function findDoorPanels(nodes){
   const panels = nodes.filter(o => /(leftpanel|rightpanel)\d+$/i.test(o.name) && !/_open|_closed/i.test(o.name));
   return panels.map(o=>{
@@ -467,240 +468,387 @@ function findDoorVariantPairs(nodes){
   });
   return Array.from(map.values()).filter(p => p.open || p.closed);
 }
+function getDoorRootsByIndex(groupKeyPref, idx, sidePref){
+  const roots = [];
+  doorPanels.forEach(d=>{
+    const di   = d.userData.idx ?? extractIndex(d.name);
+    const side = d.userData.side ?? extractSide(d.name);
+    const gk   = d.userData.groupKey ?? doorGroupKey(d.name);
+    if(String(di) === String(idx)
+      && (!sidePref || sidePref===side)
+      && (!groupKeyPref || groupKeyPref===gk)) roots.push(d);
+  });
+  doorVariantPairs.forEach(pair=>{
+    const { open, closed, group, side, idx:pi } = pair;
+    [open, closed].filter(Boolean).forEach(n=>{
+      const di = pi ?? extractIndex(n.name);
+      const gk = group ?? doorGroupKey(n.name);
+      const sd = side  ?? extractSide(n.name);
+      if(String(di) === String(idx)
+        && (!sidePref || sidePref===sd)
+        && (!groupKeyPref || groupKeyPref===gk)) roots.push(n);
+    });
+  });
+  return roots;
+}
+function pickPreferredDoorRoot(idx, sidePref, groupKeyPref){
+  const roots = getDoorRootsByIndex(groupKeyPref, idx, sidePref);
+  if(!roots.length){
+    const anyGroup = getDoorRootsByIndex(null, idx, sidePref);
+    if(anyGroup.length) return anyGroup.find(r=>r.visible===true) || anyGroup[0];
+    const anySideAnyGroup = getDoorRootsByIndex(null, idx, null);
+    if(anySideAnyGroup.length) return anySideAnyGroup.find(r=>r.visible===true) || anySideAnyGroup[0];
+    return null;
+  }
+  return roots.find(r=>r.visible===true) || roots[0];
+}
+function reparentHardwareToDoors(nodes, _doorPanels){
+  const hardware = nodes.filter(o => /(handle|hinge|knob|hardware)/i.test(o.name));
+  hardware.forEach(h=>{
+    const idx          = extractIndex(h.name);
+    const sidePref     = extractSide(h.name);
+    const groupKeyPref = doorGroupKey(h.name);
+
+    let target = (idx!=null) ? pickPreferredDoorRoot(idx, sidePref, groupKeyPref) : null;
+
+    if(!target){
+      let candidates = _doorPanels;
+      const sameGroup = _doorPanels.filter(d => (d.userData.groupKey ?? doorGroupKey(d.name)) === groupKeyPref);
+      if(sameGroup.length) candidates = sameGroup;
+      if(sidePref){
+        const filtered = candidates.filter(d=> (d.userData.side ?? extractSide(d.name))===sidePref);
+        if(filtered.length) candidates = filtered;
+      }
+      let best=null, bestDist=Infinity;
+      const hp = new THREE.Vector3(); new THREE.Box3().setFromObject(h).getCenter(hp);
+      candidates.forEach(d=>{
+        const dp = new THREE.Vector3(); new THREE.Box3().setFromObject(d).getCenter(dp);
+        const dist = hp.distanceTo(dp);
+        if(dist<bestDist){ bestDist=dist; best=d; }
+      });
+      target = best;
+    }
+
+    if(target && h.parent !== target) reparentKeepWorld(h, target);
+  });
+}
+function enforceDoorVariantExclusivity(defaultState='closed'){
+  doorVariantPairs.forEach(({open, closed})=>{
+    if(open && closed){
+      open.visible   = (defaultState === 'open');
+      closed.visible = (defaultState === 'closed');
+    }else if(open){
+      open.visible = (defaultState === 'open');
+    }else if(closed){
+      closed.visible = (defaultState === 'closed');
+    }
+  });
+}
 
 /* ---------- Asset UI (morphs) ---------- */
-function removeAssetUI(){ animGroups = []; const panel = document.getElementById('animPanel'); if(panel) panel.innerHTML=''; }
-function collectMorphMeshes(root){ const out=[]; root.traverse(o=>{ if(o.isMesh && o.morphTargetInfluences && o.morphTargetDictionary){ out.push(o); }}); return out; }
-function uniqueNamesFromMeshes(meshes){ const set=new Set(); meshes.forEach(m=>{ const d=m.morphTargetDictionary; if(!d) return; Object.keys(d).forEach(k=>set.add(k)); }); return Array.from(set); }
-function findAnimRoots(asset){ const arr=[]; asset.traverse(o=>{ if(o!==asset && o.name && /^anim_/i.test(o.name)) arr.push(o); }); return arr; }
+function removeAssetUI(){
+  animGroups = [];
+  const panel = document.getElementById('animPanel');
+  if(panel) panel.innerHTML = '';
+}
+function collectMorphMeshes(root){
+  const out = [];
+  root.traverse(o=>{ if(o.isMesh && o.morphTargetInfluences && o.morphTargetDictionary){ out.push(o); }});
+  return out;
+}
+function uniqueNamesFromMeshes(meshes){
+  const set = new Set();
+  meshes.forEach(m=>{ const d=m.morphTargetDictionary; if(!d) return; Object.keys(d).forEach(k=>set.add(k)); });
+  return Array.from(set);
+}
+function findAnimRoots(asset){
+  const arr=[]; asset.traverse(o=>{ if(o!==asset && o.name && /^anim_/i.test(o.name)) arr.push(o); });
+  return arr;
+}
 function stripAnimPrefix(s){ return s?.replace(/^anim_/i,'') ?? s; }
 
 /* ---------- Doors from clips ---------- */
-// (… sin cambios de lógica)
-let doorGroups=[]; let mixerInstance=null;
-function removeDoorUI(){ doorGroups=[]; }
+function removeDoorUI(){ doorGroups = []; }
 function buildDoorControlsFromClips(root, clips){
   if(!clips?.length) return;
-  const panel=document.getElementById('animPanel'); if(!panel) return;
-  clips.filter(c=>/^door_/i.test(c.name)).forEach((clip)=>{
-    const track=clip.tracks[0]; if(!track) return;
-    if(!mixer) mixer=new THREE.AnimationMixer(root);
-    const action=mixer.clipAction(clip); action.clampWhenFinished=true; action.enabled=true; action.play(); action.paused=true; action.time=0;
-    const pathBase=track.name.split('.')[0].split('/').pop();
-    let targetNode=null; root.traverse(o=>{ if(!targetNode && o.name===pathBase) targetNode=o; }); if(!targetNode) targetNode=root;
-    targetNode.traverse(n=>objectToDoor.set(n,doorGroups.length));
-    doorGroups.push({name:stripDoorPrefix(targetNode.name),clip,action,node:targetNode,duration:clip.duration,value:0,slider:null});
-  });
+  const panel = document.getElementById('animPanel');
+  if(!panel) return;
+
+  clips
+    .filter(c => /^door_/i.test(c.name))
+    .forEach((clip)=>{
+      const track = clip.tracks[0];
+      if(!track) return;
+
+      if(!mixer) mixer = new THREE.AnimationMixer(root);
+      const action = mixer.clipAction(clip);
+      action.clampWhenFinished = true;
+      action.enabled = true;
+      action.play();
+      action.paused = true;
+      action.time   = 0;
+
+      const pathFull = track.name.split('.')[0];
+      const pathBase = pathFull.split('/').pop();
+
+      let targetNode = null;
+      root.traverse(o=>{ if(!targetNode && o.name === pathBase) targetNode = o; });
+      if(!targetNode) targetNode = root;
+
+      targetNode.traverse(n=> objectToDoor.set(n, doorGroups.length));
+
+      doorGroups.push({
+        name: stripDoorPrefix(targetNode.name),
+        clip, action, node: targetNode,
+        duration: clip.duration, value: 0, slider: null
+      });
+    });
+
   renderActionsPanel();
 }
 function renderActionsPanel(){
-  const panel=document.getElementById('animPanel'); if(!panel) return;
-  panel.innerHTML='';
-  doorGroups.forEach((g)=>{ const row=document.createElement('div'); row.className='act-row';
-    const name=document.createElement('div'); name.textContent=g.name; row.appendChild(name);
-    const slider=document.createElement('input'); slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.01'; slider.value=String(g.value);
-    slider.oninput=()=> setDoorValue(g, parseFloat(slider.value));
-    row.appendChild(slider); g.slider=slider; panel.appendChild(row);
+  const panel = document.getElementById('animPanel');
+  if(!panel) return;
+  panel.innerHTML = '';
+
+  // Puertas
+  doorGroups.forEach((g)=>{
+    const row = document.createElement('div'); row.className='act-row';
+    const name = document.createElement('div'); name.textContent = g.name; row.appendChild(name);
+    const slider = document.createElement('input'); slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.01'; slider.value=String(g.value);
+    slider.oninput = ()=> setDoorValue(g, parseFloat(slider.value));
+    row.appendChild(slider); g.slider = slider;
+    panel.appendChild(row);
   });
-  if(!assetRoot){ document.getElementById('animCard').style.display='none'; return; }
-  const animRoots=findAnimRoots(assetRoot); const groups=[]; objectToGroup.clear();
-  animRoots.forEach((ar,gi)=>{ const meshes=collectMorphMeshes(ar); if(!meshes.length) return;
-    const morphNames=uniqueNamesFromMeshes(meshes); if(!morphNames.length) return;
-    ar.traverse(n=>{ objectToGroup.set(n,gi); });
-    groups.push({ name:ar.name, node:ar, meshes, morphNames, activeMorph:morphNames[0], sliderEl:null, selectEl:null, tween:null });
+
+  // Morphs
+  if(!assetRoot){
+    document.getElementById('animCard').style.display='none';
+    return;
+  }
+  const animRoots = findAnimRoots(assetRoot);
+  const groups = [];
+  objectToGroup.clear();
+
+  animRoots.forEach((ar, gi)=>{
+    const meshes = collectMorphMeshes(ar); if(!meshes.length) return;
+    const morphNames = uniqueNamesFromMeshes(meshes); if(!morphNames.length) return;
+    ar.traverse(n=>{ objectToGroup.set(n, gi); });
+    groups.push({ name: ar.name, node: ar, meshes, morphNames, activeMorph: morphNames[0], sliderEl:null, selectEl:null, tween:null });
   });
-  animGroups=groups;
-  animGroups.forEach(group=>{ const row=document.createElement('div'); row.className='act-row';
-    const label=document.createElement('div'); label.textContent=stripAnimPrefix(group.name); row.appendChild(label);
-    const slider=document.createElement('input'); slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.01'; slider.value='0';
+  animGroups = groups;
+
+  animGroups.forEach(group=>{
+    const row = document.createElement('div'); row.className='act-row';
+    const label = document.createElement('div'); label.textContent = stripAnimPrefix(group.name); row.appendChild(label);
+
+    const slider = document.createElement('input'); slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.01'; slider.value='0';
     slider.oninput=()=>{ const val=parseFloat(slider.value);
-      group.meshes.forEach(m=>{ const d=m.morphTargetDictionary,inf=m.morphTargetInfluences; if(!d||!inf) return;
+      group.meshes.forEach(m=>{ const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return;
         if(group.activeMorph in d){ inf[d[group.activeMorph]]=val; m.needsUpdate=true; }
       });
     };
-    row.appendChild(slider); group.sliderEl=slider; panel.appendChild(row);
+    row.appendChild(slider); group.sliderEl=slider;
+    panel.appendChild(row);
   });
+
   document.getElementById('animCard').style.display='';
 }
-function setDoorValue(group,value){ group.value=THREE.MathUtils.clamp(value,0,1); if(!group.action) return; group.action.paused=true; group.action.time=group.duration*group.value; group.action.syncWith(group.action); if(group.slider) group.slider.value=String(group.value); }
-function tweenDoor(group,toValue,durationMs=500){ const from=group.value??0; const start=performance.now(); const step=(t)=>{ const k=Math.min(1,(t-start)/durationMs); const v=from+(toValue-from)*k; setDoorValue(group,v); if(k<1) requestAnimationFrame(step); }; requestAnimationFrame(step); }
 
-/* ---------- Sombras ---------- */
-function setCastShadow(obj,val){ obj.traverse(o=>{ if(o.isMesh){ o.castShadow=!!val; }}); }
+/* ---------- Door anim helpers ---------- */
+function setDoorValue(group, value){
+  group.value = THREE.MathUtils.clamp(value, 0, 1);
+  if(!group.action) return;
+  group.action.paused = true;
+  group.action.time   = group.duration * group.value;
+  group.action.syncWith(group.action);
+  if(group.slider) group.slider.value = String(group.value);
+}
+function tweenDoor(group, toValue, durationMs=500){
+  const from = group.value ?? 0;
+  const start = performance.now();
+  const step = (t)=>{
+    const k = Math.min(1, (t-start)/durationMs);
+    const v = from + (toValue-from)*k;
+    setDoorValue(group, v);
+    if(k<1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+/* ---------- Sombras suaves (shadow catcher) ---------- */
+function setCastShadow(obj, val){ obj.traverse(o=>{ if(o.isMesh){ o.castShadow = !!val; }}); }
 function ensureShadowSystem(){
   if(!assetRoot) return;
+
   if(!dirLight){
-    dirLight=new THREE.DirectionalLight(0xffffff,0.5);
-    dirLight.castShadow=true; dirLight.shadow.mapSize.set(2048,2048);
-    dirLight.shadow.bias=-0.00015; dirLight.shadow.normalBias=0.015;
+    dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(2048,2048);
+    dirLight.shadow.bias = -0.00015;
+    dirLight.shadow.normalBias = 0.015;
     scene.add(dirLight);
   }
   if(!shadowPlane){
-    const mat=new THREE.ShadowMaterial({ opacity:0.07 });
-    const geo=new THREE.PlaneGeometry(1,1);
-    shadowPlane=new THREE.Mesh(geo,mat); shadowPlane.rotation.x=-Math.PI/2; shadowPlane.receiveShadow=true; shadowPlane.renderOrder=-1; scene.add(shadowPlane);
+    const mat = new THREE.ShadowMaterial({ opacity: 0.07 });
+    const geo = new THREE.PlaneGeometry(1,1);
+    shadowPlane = new THREE.Mesh(geo, mat);
+    shadowPlane.rotation.x = -Math.PI/2;
+    shadowPlane.receiveShadow = true;
+    shadowPlane.renderOrder = -1;
+    scene.add(shadowPlane);
   }
-  const box=new THREE.Box3().setFromObject(assetRoot); const size=box.getSize(new THREE.Vector3()); const ctr=box.getCenter(new THREE.Vector3());
-  shadowPlane.position.set(ctr.x, box.min.y+0.0001, ctr.z);
+
+  const box = new THREE.Box3().setFromObject(assetRoot);
+  const size= box.getSize(new THREE.Vector3());
+  const ctr = box.getCenter(new THREE.Vector3());
+
+  shadowPlane.position.set(ctr.x, box.min.y + 0.0001, ctr.z);
   shadowPlane.scale.set(size.x*1.05, size.z*1.05, 1);
-  const dir=new THREE.Vector3().subVectors(camera.position,controls.target).normalize();
-  dirLight.position.set(ctr.x+dir.x*size.x*0.25, box.max.y+size.y*1.26, ctr.z+dir.z*size.z*0.25);
-  dirLight.target.position.set(ctr.x, ctr.y, ctr.z); scene.add(dirLight.target);
-  dirLight.shadow.radius=4.0;
-  const cam=dirLight.shadow.camera; const r=Math.max(size.x,size.z)*0.65;
-  cam.left=-r; cam.right=r; cam.top=r; cam.bottom=-r; cam.near=0.1; cam.far=size.y*4.0; cam.updateProjectionMatrix();
-  setCastShadow(assetRoot,true);
+
+  const dir = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
+  const elev = 0.9;
+  const lateral = 0.25;
+  dirLight.position.set(ctr.x + dir.x*size.x*lateral, box.max.y + size.y*1.4*elev, ctr.z + dir.z*size.z*lateral);
+  dirLight.target.position.set(ctr.x, ctr.y, ctr.z);
+  scene.add(dirLight.target);
+
+  dirLight.shadow.radius = 4.0;
+
+  const cam = dirLight.shadow.camera;
+  const r = Math.max(size.x, size.z) * 0.65;
+  cam.left=-r; cam.right=r; cam.top=r; cam.bottom=-r; cam.near=0.1; cam.far=size.y * 4.0;
+  cam.updateProjectionMatrix();
+
+  setCastShadow(assetRoot, true);
 }
-function removeShadowSystem(){ if(shadowPlane){ shadowPlane.geometry.dispose(); shadowPlane.material.dispose(); scene.remove(shadowPlane); shadowPlane=null; } if(dirLight){ scene.remove(dirLight.target); scene.remove(dirLight); dirLight=null; } }
+function removeShadowSystem(){
+  if(shadowPlane){
+    shadowPlane.geometry.dispose(); shadowPlane.material.dispose();
+    scene.remove(shadowPlane); shadowPlane=null;
+  }
+  if(dirLight){
+    scene.remove(dirLight.target);
+    scene.remove(dirLight);
+    dirLight = null;
+  }
+}
 
 /* ---------- Variants (KHR_materials_variants) ---------- */
-function placeVariantsForViewport(){
-  if(!isMobile()){
-    if(variantsCard.dataset.hasVariants==='1'){ variantsCard.style.display=''; }
-    mobileVariants.style.display='none';
-  }else{
-    variantsCard.style.display='none';
-    if(variantsCard.dataset.hasVariants==='1'){ mobileVariants.style.display='block'; } else { mobileVariants.style.display='none'; }
-  }
-  updateTopbarVar();
-}
-
 async function setupVariants(gltf){
-  // reset
-  variantSelect.innerHTML=''; mobileSwatches.innerHTML=''; variantsCard.style.display='none'; mobileVariants.style.display='none';
-  variantsCard.dataset.hasVariants='0'; applyVariantRef=null;
+  // reset UI
+  variantSelect.innerHTML = '';
+  variantsCard.style.display = 'none';
+  variantSwatches.innerHTML = '';
+  variantSwatches.style.display = 'none';
+  hasVariants = false;
 
-  const parser=gltf.parser;
-  const json=parser.json;
-  const rootExt=json.extensions && json.extensions.KHR_materials_variants;
-  if(!rootExt || !rootExt.variants || !rootExt.variants.length){ placeVariantsForViewport(); return; }
+  const parser = gltf.parser;
+  const json   = parser.json;
+  const rootExt = json.extensions && json.extensions.KHR_materials_variants;
+  if(!rootExt || !rootExt.variants || !rootExt.variants.length) return;
 
-  const variantNames=rootExt.variants.map(v=>v.name);
+  const variantNames = rootExt.variants.map(v => v.name); // strings
+  hasVariants = true;
 
-  // cache materials
-  const matCache=new Map();
-  const getMaterialByIndex=(i)=>{ if(!matCache.has(i)) matCache.set(i, parser.getDependency('material', i)); return matCache.get(i); };
+  // material cache
+  const matCache = new Map();
+  const getMaterialByIndex = (i) => {
+    if (!matCache.has(i)) matCache.set(i, parser.getDependency('material', i));
+    return matCache.get(i);
+  };
 
-  // guardar material original
-  gltf.scene.traverse(o=>{ if(o.isMesh && o.material && !o.userData._origMaterial){ o.userData._origMaterial=o.material; } });
+  // save original material
+  gltf.scene.traverse(o => {
+    if (o.isMesh && o.material && !o.userData._origMaterial) o.userData._origMaterial = o.material;
+  });
 
   async function applyVariant(root, name){
-    const nameToIdx=new Map(rootExt.variants.map((v,i)=>[v.name,i]));
-    const wantedIdx=nameToIdx.get(name);
-    if(wantedIdx==null) return;
-    const pending=[];
-    root.traverse(obj=>{
-      if(!obj.isMesh) return;
-      const ext=obj.userData?.gltfExtensions?.KHR_materials_variants;
-      if(!ext || !ext.mappings){ if(obj.userData._origMaterial) obj.material=obj.userData._origMaterial; return; }
-      let chosen=null;
-      for(const m of ext.mappings){ if(m.variants?.includes(wantedIdx)){ chosen=m; break; } }
-      if(chosen && typeof chosen.material==='number'){
-        pending.push(getMaterialByIndex(chosen.material).then(mat=>{ obj.material=mat; }));
-      }else{
-        if(obj.userData._origMaterial) obj.material=obj.userData._origMaterial;
+    const nameToIdx = new Map(rootExt.variants.map((v, i) => [v.name, i]));
+    const wantedIdx = nameToIdx.get(name);
+    if (wantedIdx == null) return;
+
+    const pending = [];
+    root.traverse(obj => {
+      if (!obj.isMesh) return;
+      const ext = obj.userData?.gltfExtensions?.KHR_materials_variants;
+      if (!ext || !ext.mappings) {
+        if (obj.userData._origMaterial) obj.material = obj.userData._origMaterial;
+        return;
+      }
+      let chosen = null;
+      for (const m of ext.mappings) {
+        if (m.variants?.includes(wantedIdx)) { chosen = m; break; }
+      }
+      if (chosen && typeof chosen.material === 'number') {
+        pending.push(getMaterialByIndex(chosen.material).then(mat => { obj.material = mat; }));
+      } else if (obj.userData._origMaterial) {
+        obj.material = obj.userData._origMaterial;
       }
     });
     await Promise.all(pending);
+
+    // marcar swatch seleccionado
+    [...variantSwatches.children].forEach(el=>{
+      el.setAttribute('aria-selected', String(el.dataset.varName === name));
+    });
   }
-  applyVariantRef=(n)=>applyVariant(gltf.scene,n);
 
-  /* Desktop <select> */
-  variantNames.forEach((n,i)=>{ const opt=document.createElement('option'); opt.value=n; opt.textContent=n; if(i===0) opt.selected=true; variantSelect.appendChild(opt); });
+  // ----- Desktop select (card) -----
+  variantNames.forEach((n, i)=>{
+    const opt = document.createElement('option');
+    opt.value = n; opt.textContent = n;
+    if (i===0) opt.selected = true;
+    variantSelect.appendChild(opt);
+  });
+  variantsCard.style.display = isMobile() ? 'none' : '';
 
-  /* ---------- Mobile swatches con imágenes ---------- */
-  // Intentar encontrar swatch en /swatches con patrón swatch_<Name>.(png|jpg|jpeg|webp)
-  const exts=['.png','.jpg','.jpeg','.webp'];
-  const titleCase = s => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
-  function candidates(name){
-    const raw=name||''; const lower=raw.toLowerCase(); const tcase=titleCase(lower); // “Wood”
-    const bases=[raw, lower, tcase, raw.replace(/^swatch_/i,'')]; // por si el nombre ya trae el prefijo
-    const uniq=[...new Set(bases)];
-    const files=[];
-    uniq.forEach(b=>{
-      exts.forEach(ext=>{
-        files.push(`swatches/swatch_${b}${ext}`);
+  // ----- Mobile swatches -----
+  function normalize(s){ return String(s||'').replace(/^swatch_/i,'').toLowerCase(); }
+  function urlForSwatch(varName){
+    const base = `swatches/swatch_${varName}`;
+    // intentamos png y caemos a jpg en onerror
+    return `${base}.png`;
+  }
+  if(isMobile()){
+    variantSwatches.style.display = 'flex';
+    variantSwatches.innerHTML = '';
+    variantNames.forEach((name, i)=>{
+      const varNorm = normalize(name);
+      const btn = document.createElement('button');
+      btn.className = 'swatch';
+      btn.type = 'button';
+      btn.title = name;
+      btn.dataset.varName = name;
+      btn.setAttribute('aria-selected', i===0 ? 'true' : 'false');
+
+      const img = new Image();
+      img.onload = ()=>{ btn.style.backgroundImage = `url('${img.src}')`; };
+      img.onerror = ()=>{
+        // fallback a jpg si no hay png
+        if(!/\.jpg$/i.test(img.src)){ img.src = `swatches/swatch_${name}.jpg`; }
+      };
+      img.src = urlForSwatch(name);
+
+      btn.addEventListener('click', async ()=>{
+        await applyVariant(gltf.scene, name);
+        [...variantSwatches.children].forEach(el=> el.setAttribute('aria-selected','false'));
+        btn.setAttribute('aria-selected','true');
       });
-    });
-    return files;
-  }
-  function testImage(url){
-    return new Promise(resolve=>{
-      const img=new Image();
-      img.onload = ()=> resolve(url);
-      img.onerror= ()=> resolve(null);
-      img.src=url;
+
+      variantSwatches.appendChild(btn);
     });
   }
-  async function resolveSwatchURL(name){
-    const list=candidates(name);
-    for(const url of list){
-      const ok=await testImage(url);
-      if(ok) return ok;
-    }
-    return null;
-  }
-
-  function colorFallback(n){
-    const s=(n||'').toLowerCase();
-    if(s.includes('brown') || s.includes('marr')) return '#8a5a3c';
-    if(s.includes('white') || s.includes('blanc')) return '#ffffff';
-    return '#cfcfcf';
-  }
-
-  async function makeSwatch(name, active=false){
-    const btn=document.createElement('button');
-    btn.className='swatch';
-    btn.title=name;
-    btn.setAttribute('aria-label', name);
-    btn.setAttribute('aria-pressed', active?'true':'false');
-
-    // fallback color mientras resolvemos la imagen
-    btn.style.background=colorFallback(name);
-    if(btn.style.background==='#ffffff'){ btn.style.borderColor='rgba(0,0,0,.3)'; }
-
-    // resolver imagen y aplicarla si existe
-    const url=await resolveSwatchURL(name);
-    if(url){
-      btn.style.backgroundImage=`url("${url}")`;
-      // si el swatch es muy claro, mantenemos un borde sutil
-      btn.style.backgroundColor='transparent';
-      btn.style.borderColor='rgba(0,0,0,.18)';
-    }
-
-    btn.addEventListener('click', async ()=>{
-      Array.from(mobileSwatches.querySelectorAll('.swatch')).forEach(s=>s.setAttribute('aria-pressed','false'));
-      btn.setAttribute('aria-pressed','true');
-      if(applyVariantRef) await applyVariantRef(name);
-      const opt=Array.from(variantSelect.options).find(o=>o.value===name);
-      if(opt) variantSelect.value=name;
-    });
-    mobileSwatches.appendChild(btn);
-  }
-
-  // construir swatches (en paralelo)
-  await Promise.all(variantNames.map((n,i)=> makeSwatch(n, i===0)));
-
-  // mostrar UI según viewport
-  variantsCard.dataset.hasVariants='1';
-  if(isMobile()){ mobileVariants.style.display='block'; } else { variantsCard.style.display=''; }
-  placeVariantsForViewport();
 
   // aplicar primera por defecto
   await applyVariant(gltf.scene, variantNames[0]);
 
-  // sincronizar select de escritorio
-  variantSelect.onchange = async ()=> {
-    const v=variantSelect.value;
-    await applyVariant(gltf.scene, v);
-    Array.from(mobileSwatches.querySelectorAll('.swatch')).forEach(s=>{
-      s.setAttribute('aria-pressed', s.title===v ? 'true' : 'false');
-    });
-  };
+  // eventos
+  variantSelect.onchange = async ()=> { await applyVariant(gltf.scene, variantSelect.value); };
 }
 
 /* ---------- placing ---------- */
-let mixerCreated=false;
+let mixerCreated = false;
 function place(root, clips){
   root.traverse(o=>{
     if(o.isMesh && /collider/i.test(o.name)) o.visible=false;
@@ -708,23 +856,23 @@ function place(root, clips){
   });
 
   new THREE.Box3().setFromObject(root).getCenter(root.position).multiplyScalar(-1);
-  const box=new THREE.Box3().setFromObject(root);
-  const size=box.getSize(new THREE.Vector3());
+  const box  = new THREE.Box3().setFromObject(root);
+  const size = box.getSize(new THREE.Vector3());
   root.position.y -= box.min.y;
 
-  allNodes=[]; root.traverse(o=>{ if(o.name) allNodes.push(o); });
-  ceilings=allNodes.filter(o=>/^ceiling\d*$/i.test(o.name));
-  wallRoots=allNodes.filter(o=>/^wall\d+$/i.test(o.name));
+  allNodes = []; root.traverse(o=>{ if(o.name) allNodes.push(o); });
+  ceilings  = allNodes.filter(o => /^ceiling\d*$/i.test(o.name));
+  wallRoots = allNodes.filter(o => /^wall\d+$/i.test(o.name));
 
-  doorPanels=findDoorPanels(allNodes);
-  doorVariantPairs=findDoorVariantPairs(allNodes);
-
+  doorPanels       = findDoorPanels(allNodes);
+  doorVariantPairs = findDoorVariantPairs(allNodes);
   enforceDoorVariantExclusivity('closed');
+  reparentHardwareToDoors(allNodes, doorPanels);
 
-  current=root; scene.add(root);
+  current = root; scene.add(root);
 
-  assetRoot=null;
-  current.traverse(o=>{ if(!assetRoot && o.name && /^model_/i.test(o.name)) assetRoot=o; });
+  assetRoot = null;
+  current.traverse(o=>{ if(!assetRoot && o.name && /^model_/i.test(o.name)) assetRoot = o; });
 
   setUIMode(assetRoot ? 'asset' : 'room');
   removeDoorUI();
@@ -732,39 +880,38 @@ function place(root, clips){
     buildDoorControlsFromClips(current, clips||[]);
     renderActionsPanel();
     ensureShadowSystem();
-  }else{
+  } else {
     removeAssetUI(); removeShadowSystem(); objectToGroup.clear(); objectToDoor.clear();
   }
 
-  if(!mixerCreated){ mixer=new THREE.AnimationMixer(current); mixerCreated=true; }
+  if(!mixerCreated){ mixer = new THREE.AnimationMixer(current); mixerCreated = true; }
 
-  const maxDim=Math.max(size.x,size.y,size.z);
+  const maxDim = Math.max(size.x,size.y,size.z);
   camera.position.setScalar(maxDim*1.6).setY(maxDim*0.8);
   controls.target.copy(new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3()));
   controls.update();
 
-  statModel.textContent=`Model: ${root.name || '(scene)'}`;
+  statModel.textContent = `Model: ${root.name || '(scene)'}`;
   updateStats(size);
   updateTopbarVar();
-  placeVariantsForViewport();
 }
 
-/* ---------- auto-hide wall, clicks, drag&drop, stats toggle, loop ---------- */
-/* (todo lo de tu versión previa se mantiene igual) */
-
-const ray=new THREE.Raycaster();
+/* ---------- auto-hide wall (rooms) ---------- */
+const ray = new THREE.Raycaster();
 function wallRootOf(obj){ let p=obj; while(p){ if(/^wall\d+$/i.test(p.name)) return p; p=p.parent; } return null; }
 function sampleFrontWalls(){
   if(!wallRoots?.length) return new Set();
   let closest=null, closestDist=Infinity;
-  const distToTarget=camera.position.distanceTo(controls.target);
+  const distToTarget = camera.position.distanceTo(controls.target);
   const samples=[{x:0,y:0},{x:0.14,y:0},{x:-0.14,y:0},{x:0,y:0.14},{x:0,y:-0.14}];
   for(const ndc of samples){
-    ray.setFromCamera(ndc,camera);
-    const hits=ray.intersectObjects(wallRoots,true);
+    ray.setFromCamera(ndc, camera);
+    const hits = ray.intersectObjects(wallRoots, true);
     if(hits.length){
-      const h=hits[0];
-      if(h.distance<distToTarget*0.995 && h.distance<closestDist){ closest=wallRootOf(h.object); closestDist=h.distance; }
+      const h = hits[0];
+      if(h.distance < distToTarget*0.995 && h.distance < closestDist){
+        closest = wallRootOf(h.object); closestDist = h.distance;
+      }
     }
   }
   return closest ? new Set([closest]) : new Set();
@@ -773,41 +920,66 @@ function updateAutoHide(){
   const autoHToggle=document.getElementById('autoHideToggle');
   if(!autoHToggle || autoHToggle.closest('label').style.display==='none') return;
   if(!autoHToggle.checked || !current) return;
-  const front=sampleFrontWalls();
+  const front = sampleFrontWalls();
   for(const wr of Array.from(lastHiddenWalls)){ if(!front.has(wr)){ wr.visible=true; lastHiddenWalls.delete(wr);} }
   for(const wr of front){ if(!lastHiddenWalls.has(wr)){ wr.visible=false; lastHiddenWalls.add(wr);} }
 }
 
-const mouse=new THREE.Vector2(); let downPos=null;
-function screenToNDC(e){ const rect=renderer.domElement.getBoundingClientRect(); mouse.x=((e.clientX-rect.left)/rect.width)*2-1; mouse.y=-((e.clientY-rect.top)/rect.height)*2+1; }
-function findMorphGroupFromObject(obj){ let p=obj; while(p){ if(objectToGroup.has(p)) return objectToGroup.get(p); p=p.parent; } return null; }
-function findDoorGroupFromObject(obj){ let p=obj; while(p){ if(objectToDoor.has(p)) return objectToDoor.get(p); p=p.parent; } return null; }
-canvas.addEventListener('pointerdown', (e)=>{ downPos={x:e.clientX,y:e.clientY}; });
+/* ---------- Clicks (morphs y puertas) ---------- */
+const mouse = new THREE.Vector2();
+let downPos = null;
+function screenToNDC(e){
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+}
+function findMorphGroupFromObject(obj){
+  let p=obj; while(p){ if(objectToGroup.has(p)) return objectToGroup.get(p); p=p.parent; } return null;
+}
+function findDoorGroupFromObject(obj){
+  let p=obj; while(p){ if(objectToDoor.has(p)) return objectToDoor.get(p); p=p.parent; } return null;
+}
+canvas.addEventListener('pointerdown', (e)=>{ downPos = {x:e.clientX,y:e.clientY}; });
 canvas.addEventListener('pointerup', (e)=>{
   if(controls.dragging) return;
   if(downPos && (Math.hypot(e.clientX-downPos.x, e.clientY-downPos.y) > 3)) return;
-  const rect=renderer.domElement.getBoundingClientRect();
+
+  const rect = renderer.domElement.getBoundingClientRect();
   if(e.clientY < rect.top + (topbar?.offsetHeight||0)) return;
+
   screenToNDC(e);
-  ray.setFromCamera(mouse,camera);
-  const intersects=ray.intersectObject(current ?? scene, true);
+  ray.setFromCamera(mouse, camera);
+  const intersects = ray.intersectObject(current ?? scene, true);
   if(!intersects.length) return;
-  const obj=intersects[0].object;
-  const dIdx=findDoorGroupFromObject(obj);
-  if(dIdx!=null){ const g=doorGroups[dIdx]; const target=(g.value>=0.5)?0:1; tweenDoor(g,target,500); return; }
+
+  const obj = intersects[0].object;
+
+  const dIdx = findDoorGroupFromObject(obj);
+  if(dIdx!=null){
+    const g = doorGroups[dIdx];
+    const target = (g.value >= 0.5) ? 0 : 1;
+    tweenDoor(g, target, 500);
+    return;
+  }
   if(assetRoot){
-    const gi=findMorphGroupFromObject(obj);
+    const gi = findMorphGroupFromObject(obj);
     if(gi!=null){
-      const group=animGroups[gi];
-      const probe=group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
+      const group = animGroups[gi];
+      const probe = group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
       if(probe){
-        const idx=probe.morphTargetDictionary[group.activeMorph];
-        const cur=probe.morphTargetInfluences[idx] ?? 0;
-        const target=(cur>=0.5)?0:1;
-        const start=performance.now(); const from=cur;
-        const step=(t)=>{ const k=Math.min(1,(t-start)/500); const v=from+(target-from)*k;
-          group.meshes.forEach(m=>{ const d=m.morphTargetDictionary,inf=m.morphTargetInfluences; if(!d||!inf) return; if(group.activeMorph in d){ inf[d[group.activeMorph]]=v; m.needsUpdate=true; }});
-          if(group.sliderEl) group.sliderEl.value=String(v);
+        const idx = probe.morphTargetDictionary[group.activeMorph];
+        const cur = probe.morphTargetInfluences[idx] ?? 0;
+        const target = (cur >= 0.5) ? 0 : 1;
+        const start = performance.now();
+        const from = cur;
+        const step = (t)=>{
+          const k = Math.min(1, (t-start)/500);
+          const v = from + (target-from)*k;
+          group.meshes.forEach(m=>{
+            const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return;
+            if(group.activeMorph in d){ inf[d[group.activeMorph]] = v; m.needsUpdate = true; }
+          });
+          if(group.sliderEl) group.sliderEl.value = String(v);
           if(k<1) requestAnimationFrame(step);
         };
         requestAnimationFrame(step);
@@ -816,66 +988,98 @@ canvas.addEventListener('pointerup', (e)=>{
   }
 });
 
+/* ---------- loading ---------- */
 function loadBlob(file){
   setUIMode('clean'); setMsg('Loading local file…'); clearModel();
-  const pre=guessModeFromFilename(file.name); if(pre) setUIMode(pre);
-  lastGLBBytes=file.size; statBytes.textContent=`GLB: ${humanBytes(lastGLBBytes)}`;
-  const url=URL.createObjectURL(file);
+  const pre = guessModeFromFilename(file.name); if(pre) setUIMode(pre);
+  lastGLBBytes = file.size; statBytes.textContent = `GLB: ${humanBytes(lastGLBBytes)}`;
+  const url = URL.createObjectURL(file);
   loader.load(url, async (g)=>{
       place(g.scene, g.animations||[]);
-      await setupVariants(g);
-      setMsg(file.name); URL.revokeObjectURL(url);
+      await setupVariants(g);                 // variantes (desktop + móvil)
+      setMsg(file.name);
+      URL.revokeObjectURL(url);
     },
     undefined, e=>{ console.error(e); setMsg('Error with local file'); });
 }
 
-/* UI */
-const fileInput=document.getElementById('fileInput');
-document.getElementById('fileBtn').onclick=()=>{ fileInput.value=''; fileInput.click(); };
-fileInput.onchange=()=>{ const f=fileInput.files?.[0]; if(f) loadBlob(f); };
-document.getElementById('doorsToggle').onchange=e=>{/* room only */};
-document.getElementById('hideCeilingToggle').onchange=e=>{ ceilings.forEach(c=> c.visible=!e.target.checked); };
-document.getElementById('autoRotateToggle').onchange=e=>{ controls.autoRotate=e.target.checked; statRot.textContent=`Rotate: ${e.target.checked?'On':'Off'}`; };
+/* ---------- UI ---------- */
+const fileInput = document.getElementById('fileInput');
+document.getElementById('fileBtn').onclick = ()=>{ fileInput.value=''; fileInput.click(); };
+fileInput.onchange = ()=>{ const f=fileInput.files?.[0]; if(f) loadBlob(f); };
+document.getElementById('doorsToggle').onchange = e=> {/* room only */};
+document.getElementById('hideCeilingToggle').onchange = e=>{ ceilings.forEach(c=> c.visible = !e.target.checked); };
+document.getElementById('autoRotateToggle').onchange = e=>{ controls.autoRotate = e.target.checked; statRot.textContent = `Rotate: ${e.target.checked?'On':'Off'}`; };
 
-/* drag & drop */
+/* ---------- drag & drop ---------- */
 const drop=document.getElementById('drop');
-['dragenter','dragover','dragleave','drop'].forEach(ev=>{ window.addEventListener(ev,e=>{ e.preventDefault(); e.stopPropagation(); },false); });
+['dragenter','dragover','dragleave','drop'].forEach(ev=>{
+  window.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); }, false);
+});
 window.addEventListener('dragenter', ()=> drop.style.display='flex');
 window.addEventListener('dragover',  ()=> drop.style.display='flex');
-window.addEventListener('dragleave', e=>{ if(e.clientX<=0||e.clientY<=0||e.clientX>=innerWidth||e.clientY>=innerHeight){ drop.style.display='none'; }});
-drop.addEventListener('drop', e=>{ e.preventDefault(); e.stopPropagation(); drop.style.display='none'; const f=e.dataTransfer?.files?.[0]; if(f) loadBlob(f); });
-
-/* stats toggle */
-const statsEl=document.getElementById('stats');
-const statsToggle=document.getElementById('statsToggle');
-function applyStatsMode(){
-  if(isMobile()){ statsEl.classList.remove('open'); statsToggle.style.display='inline-flex'; statsToggle.setAttribute('aria-expanded','false'); }
-  else{ statsEl.classList.add('open'); statsToggle.style.display='none'; statsToggle.setAttribute('aria-expanded','true'); }
+window.addEventListener('dragleave', e=>{
+  if(e.clientX<=0||e.clientY<=0||e.clientX>=innerWidth||e.clientY>=innerHeight){ drop.style.display='none'; }
+});
+function handleDrop(e){
+  e.preventDefault(); e.stopPropagation();
+  drop.style.display='none';
+  const f=e.dataTransfer?.files?.[0]; if(f) loadBlob(f);
 }
-statsToggle.addEventListener('click', ()=>{ if(!isMobile()) return; const open=statsEl.classList.toggle('open'); statsToggle.setAttribute('aria-expanded', open?'true':'false'); });
-addEventListener('resize', ()=>{ applyStatsMode(); placeVariantsForViewport(); updateTopbarVar(); });
-applyStatsMode();
-placeVariantsForViewport();
+drop.addEventListener('drop', handleDrop);
 
-/* resize & loop */
-function resize(){ const w=innerWidth,h=innerHeight; renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); updateTopbarVar(); }
+/* ---------- stats toggle (mobile) ---------- */
+const statsEl = document.getElementById('stats');
+const statsToggle = document.getElementById('statsToggle');
+function applyStatsMode(){
+  if(isMobile()){
+    statsEl.classList.remove('open');
+    statsToggle.style.display = 'inline-flex';
+    statsToggle.setAttribute('aria-expanded','false');
+  }else{
+    statsEl.classList.add('open'); // visible en desktop
+    statsToggle.style.display = 'none';
+    statsToggle.setAttribute('aria-expanded','true');
+  }
+}
+statsToggle.addEventListener('click', ()=>{ if(!isMobile()) return;
+  const open = statsEl.classList.toggle('open');
+  statsToggle.setAttribute('aria-expanded', open ? 'true':'false');
+});
+addEventListener('resize', ()=>{ applyStatsMode(); updateTopbarVar(); setMsg(''); });
+applyStatsMode();
+
+/* ---------- resize & loop ---------- */
+function resize(){
+  const w=innerWidth,h=innerHeight;
+  renderer.setSize(w,h,false);
+  camera.aspect=w/h; camera.updateProjectionMatrix();
+  updateTopbarVar();
+}
 addEventListener('resize', ()=>{ resize(); ensureShadowSystem(); });
 resize();
 
-/* render loop */
-let lastT=performance.now();
+/* ---------- perf update & render loop ---------- */
+let lastT = performance.now();
 renderer.setAnimationLoop(()=>{
-  const now=performance.now(); const dt=now-lastT; lastT=now;
-  const fpsInst=1000/dt; fpsEMA = fpsEMA ? (fpsEMA*0.9 + fpsInst*0.1) : fpsInst;
-  const info=renderer.info;
-  statFPS.textContent=`FPS: ${fpsEMA.toFixed(0)}`;
-  statMS.textContent=`ms: ${dt.toFixed(1)}`;
-  statCalls.textContent=`Calls: ${info.render.calls}`;
-  statGeoms.textContent=`Geoms: ${info.memory.geometries}`;
-  statText.textContent=`Tex: ${info.memory.textures}`;
-  statRot.textContent=`Rotate: ${controls.autoRotate? 'On':'Off'}`;
+  const now = performance.now();
+  const dt = now - lastT; lastT = now;
+  const fpsInst = 1000/dt;
+  fpsEMA = fpsEMA ? (fpsEMA*0.9 + fpsInst*0.1) : fpsInst;
+
+  const info = renderer.info;
+  statFPS.textContent   = `FPS: ${fpsEMA.toFixed(0)}`;
+  statMS.textContent    = `ms: ${dt.toFixed(1)}`;
+  statCalls.textContent = `Calls: ${info.render.calls}`;
+  statGeoms.textContent = `Geoms: ${info.memory.geometries}`;
+  statText.textContent  = `Tex: ${info.memory.textures}`;
+  statRot.textContent   = `Rotate: ${controls.autoRotate ? 'On' : 'Off'}`;
+
   if(mixer) mixer.update(dt/1000);
-  controls.update(); updateAutoHide(); ensureShadowSystem();
+
+  controls.update();
+  updateAutoHide();
+  ensureShadowSystem();
   renderer.render(scene,camera);
 });
 </script>
