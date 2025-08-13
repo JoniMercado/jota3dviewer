@@ -16,11 +16,18 @@
 
 <style>
   :root{
-    --topbarH:72px;         /* se actualiza por JS */
-    --stackGap:8px;         /* separación vertical estándar en móvil */
-    --padCard:10px 12px;    /* padding por defecto de cards */
+    --topbarH:72px;            /* se actualiza por JS */
+    --stackGap:8px;            /* separación vertical estándar en móvil */
+    --padCard:10px 12px;       /* padding por defecto de cards (escritorio) */
     --radiusCard:12px;
-    --edgeGap:8px;          /* margen lateral en móvil */
+    --edgeGap:8px;             /* margen lateral en móvil */
+
+    /* Compacidad VARIANTES en mobile (20% más chico aprox) */
+    --padVarMobile:8px 10px;           /* contenedor <details> */
+    --padVarMobileSummary:8px 10px;    /* summary */
+    --padVarMobilePanel:8px 10px;      /* cuerpo */
+    --rowGapVarMobile:8px;             /* gap interno filas */
+    --rowMarginVarMobile:6px;          /* margen vertical de cada row */
   }
 
   html,body{height:100%;margin:0}
@@ -51,7 +58,7 @@
   }
   .card{
     background:rgba(255,255,255,.9); backdrop-filter:blur(6px);
-    border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:10px 12px
+    border:1px solid rgba(0,0,0,.08); border-radius:var(--radiusCard); padding:var(--padCard);
   }
   details.block>summary{
     list-style:none; cursor:pointer;
@@ -104,11 +111,11 @@
 
     #logo{height:36px}
 
-    /* Topbar: márgenes simétricos y auto-ajuste de ancho */
+    /* Topbar: márgenes simétricos y auto-ajuste de ancho, con bordes redondeados */
     #topbar{
       left:var(--edgeGap); right:var(--edgeGap); top:var(--stackGap);
       width:auto; max-width:unset;
-      border-radius:12px;
+      border-radius:12px; /* redondeado en ambos lados */
       display:flex; flex-wrap:wrap; gap:8px;
     }
 
@@ -116,23 +123,31 @@
     #animCard{ display:none !important; }
 
     /* VARIANTES en móvil: debajo del topbar, mismo margen lateral,
-       y separación vertical igual al margen superior */
+       y separación vertical igual al margen superior.
+       Más compacto en Y reduciendo padding y gaps internos (sin tocar la tipografía). */
     #variantsCard.mobile{
       position:fixed;
       left:var(--edgeGap); right:var(--edgeGap);
       top:calc(var(--stackGap) + var(--topbarH) + var(--stackGap));
       width:auto; max-width:unset;
-      border-radius:12px;
-      padding: 6px 8px !important; /* compacto */
+      border-radius:var(--radiusCard);
+      padding:var(--padVarMobile);
     }
-    #variantsCard.mobile details.block>summary{
-      padding: 6px 8px !important; 
-      font-size:13px;
+    #variantsCard.mobile > summary{
+      padding:var(--padVarMobileSummary);
+      font-size:14px; /* misma tipografía */
     }
-    #variantsPanel .act-row{
+    #variantsCard.mobile .panel{
+      padding:var(--padVarMobilePanel);
+    }
+    #variantsCard.mobile .act-row{
       grid-template-columns: 1fr 140px;
+      gap:var(--rowGapVarMobile);
+      margin:var(--rowMarginVarMobile) 0;
     }
-    #variantsPanel .act-row select{ width:140px; font-size:12px; padding:5px 6px; }
+    #variantsCard.mobile .act-row select{
+      width:140px; font-size:12px; padding:5px 6px; /* no reducimos fuente de labels */
+    }
 
     /* Barra inferior móvil */
     #stats{ left:0; right:0; bottom:0; border-radius:0; padding:8px 10px; gap:8px; }
