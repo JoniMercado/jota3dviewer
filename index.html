@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Asset Viewer — v0.2.6</title>
+<title>Room Viewer — v0.2.6</title>
 
 <script type="importmap">
 {
@@ -117,19 +117,16 @@
   #stats .tag{background:#f2f4f8;border:1px solid #dfe3eb;border-radius:8px;padding:4px 8px;font-size:12px}
   #stats button{background:#eee;border:1px solid #ccc;border-radius:6px;padding:4px 8px;cursor:pointer}
 
-  /* ===== Performance: tamaños fijos por tag (para evitar saltos/solapes) ===== */
+  /* ===== Performance: tamaños fijos por tag ===== */
   :root{
     --perf-tag-h: 30px;
     --perf-tag-px: 10px;
     --w-variant: 14ch;
-    --w-model:   16ch;
-    --w-size:    22ch;   /* Size necesita más ancho con datos reales */
+    --w-size:    22ch;
     --w-tris:    12ch;
     --w-fps:     10ch;
     --w-ms:      10ch;
     --w-calls:   10ch;
-    --w-geoms:   11ch;
-    --w-tex:     9ch;
     --w-glb:     13ch;
   }
   #stats .tag{
@@ -140,16 +137,12 @@
     flex:0 0 auto;
     font-variant-numeric: tabular-nums;
   }
-  #stat-variantName{      min-width:var(--w-variant); }
-  #stat-variantNameMobile{min-width:var(--w-variant); }
-  #stat-model{ min-width:var(--w-model); }
+  #stat-variant{ min-width:var(--w-variant); }
   #stat-size{  min-width:var(--w-size); }
   #stat-tris{  min-width:var(--w-tris); }
   #stat-fps{   min-width:var(--w-fps); }
   #stat-ms{    min-width:var(--w-ms); }
   #stat-calls{ min-width:var(--w-calls); }
-  #stat-geoms{ min-width:var(--w-geoms); }
-  #stat-text{  min-width:var(--w-tex); }
   #stat-bytes{ min-width:var(--w-glb); }
   #stats #stats-reset{ height:var(--perf-tag-h); }
 
@@ -194,13 +187,9 @@
     /* Barra inferior móvil */
     #stats{ left:0; right:0; bottom:0; border-radius:0; padding:8px 10px; gap:8px; }
     #statsToggle{ display:inline-flex; align-items:center; color:#333; background:transparent; border:1px solid #cfd6e0; border-radius:999px; padding:6px 12px; font-weight:600; cursor:pointer; }
-    /* Mostrar el nombre de la variante al lado del botón Performance */
-    #stat-variantNameMobile{ display:inline-flex; }
-    /* Ocultar el “Model” pill en mobile */
-    #stat-model{ display:none; }
 
     #statsContent{ display:none; }
-    /* Forzar dos filas estables al desplegar performance */
+    /* Dos filas estables al desplegar performance */
     #stats.open #statsContent{
       display:grid;
       grid-auto-flow:column;
@@ -240,22 +229,16 @@
   <!-- Bottom stats / performance -->
   <div id="stats">
     <button id="statsToggle" aria-expanded="false" style="display:none">Performance</button>
-    <!-- Variante al lado de performance (solo visible en mobile por CSS) -->
-    <span class="tag" id="stat-variantNameMobile" style="display:none">Variant: —</span>
+    <!-- Variante SIEMPRE visible al lado del botón Performance -->
+    <span class="tag" id="stat-variant">Variant: —</span>
 
     <div id="statsContent">
-      <!-- En desktop, la variante queda como tag dentro del cuadro -->
-      <span class="tag" id="stat-variantName">Variant: —</span>
-
-      <span class="tag" id="stat-model">Model: —</span>
+      <!-- (Se quitaron Model, Geoms y Tex) -->
       <span class="tag" id="stat-size">Size: —</span>
       <span class="tag" id="stat-tris">Tris: —</span>
       <span class="tag" id="stat-fps">FPS: —</span>
       <span class="tag" id="stat-ms">ms: —</span>
       <span class="tag" id="stat-calls">Calls: —</span>
-      <span class="tag" id="stat-geoms">Geoms: —</span>
-      <span class="tag" id="stat-text">Tex: —</span>
-      <span class="tag" id="stat-rot" style="display:none"></span>
       <span class="tag" id="stat-bytes">GLB: —</span>
       <button id="stats-reset" title="Reset renderer.info()">Reset</button>
     </div>
@@ -390,18 +373,13 @@ let lastGLBBytes = null;
 let variantsInfo = { names: [], selected: null };
 
 /* ---------- Bottom stats / performance elements ---------- */
-const statModel  = document.getElementById('stat-model');
 const statSize   = document.getElementById('stat-size');
 const statTris   = document.getElementById('stat-tris');
 const statFPS    = document.getElementById('stat-fps');
 const statMS     = document.getElementById('stat-ms');
 const statCalls  = document.getElementById('stat-calls');
-const statGeoms  = document.getElementById('stat-geoms');
-const statText   = document.getElementById('stat-text');
-const statRot    = document.getElementById('stat-rot');
 const statBytes  = document.getElementById('stat-bytes');
-const statVarTag = document.getElementById('stat-variantName');
-const statVarTagMobile = document.getElementById('stat-variantNameMobile');
+const statVarTag = document.getElementById('stat-variant');
 document.getElementById('stats-reset')?.addEventListener('click', ()=> renderer.info.reset());
 let fpsEMA = 0;
 
@@ -446,12 +424,11 @@ function clearModel(){
   current=null; allNodes=[]; doorPanels=[]; doorVariantPairs=[]; ceilings=[]; wallRoots=[]; lastHiddenWalls.clear();
   removeAssetUI(); removeDoorUI(); removeShadowSystem(); objectToGroup.clear(); objectToDoor.clear();
   lastGLBBytes = null;
-  statModel.textContent = 'Model: —';
+
   statSize.textContent  = 'Size: —';
   statTris.textContent  = 'Tris: —';
   statBytes.textContent = 'GLB: —';
   statVarTag.textContent = 'Variant: —';
-  statVarTagMobile.textContent = 'Variant: —';
   mixer = null;
 
   fileNameTag.style.display='none';
@@ -861,12 +838,10 @@ async function setupVariants(gltf){
     });
     await Promise.all(pending);
 
-    // actualizar UI (desktop y mobile)
+    // actualizar UI (siempre visible)
     variantsInfo.selected = name;
     const pretty = name;
-    const setText = `Variant: ${pretty}`;
-    statVarTag.textContent = setText;
-    statVarTagMobile.textContent = setText;
+    statVarTag.textContent = `Variant: ${pretty}`;
     Array.from(swatchBar.children).forEach(el => el.classList.toggle('selected', el.dataset.varName === name));
   }
 
@@ -877,7 +852,7 @@ async function setupVariants(gltf){
     return `swatches/swatch_${base}.jpg`;
   };
 
-  variantNames.forEach((name, i)=>{
+  variantNames.forEach((name)=>{
     const btn = document.createElement('button');
     btn.className = 'swatch';
     btn.type = 'button';
@@ -942,13 +917,15 @@ function place(root, clips){
 
   if(!mixerCreated){ mixer = new THREE.AnimationMixer(current); mixerCreated = true; }
 
-  const maxDim = Math.max(size.x,size.y,size.z);
+  const box2 = new THREE.Box3().setFromObject(root);
+  const size2 = box2.getSize(new THREE.Vector3());
+
+  const maxDim = Math.max(size2.x,size2.y,size2.z);
   camera.position.setScalar(maxDim*1.6).setY(maxDim*0.8);
   controls.target.copy(new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3()));
   controls.update();
 
-  statModel.textContent = `Model: ${root.name || '(scene)'}`;
-  updateStats(size);
+  updateStats(size2);
   updateTopbarVar();
   placeSwatchesForViewport();
 }
@@ -1059,7 +1036,6 @@ function loadBlob(file){
   loader.load(url, async (g)=>{
       place(g.scene, g.animations||[]);
       await setupVariants(g);
-      statModel.textContent = `Model: ${clean}`;
       URL.revokeObjectURL(url);
     },
     undefined, e=>{ console.error(e); });
@@ -1134,8 +1110,6 @@ renderer.setAnimationLoop(()=>{
   statFPS.textContent   = `FPS: ${fpsEMA.toFixed(0)}`;
   statMS.textContent    = `ms: ${dt.toFixed(1)}`;
   statCalls.textContent = `Calls: ${info.render.calls}`;
-  statGeoms.textContent = `Geoms: ${info.memory.geometries}`;
-  statText.textContent  = `Tex: ${info.memory.textures}`;
 
   if(mixer) mixer.update(dt/1000);
 
@@ -1147,4 +1121,3 @@ renderer.setAnimationLoop(()=>{
 </script>
 </body>
 </html>
-```0
