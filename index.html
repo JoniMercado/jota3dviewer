@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Room Viewer — v0.2.5</title>
+<title>Room Viewer — v0.2.6</title>
 
 <script type="importmap">
 {
@@ -16,11 +16,10 @@
 
 <style>
   :root{
-    --topbarH:72px;
-    --stackGap:8px;
-    --padCard:10px 12px;
+    --topbarH:72px;         /* se actualiza por JS */
+    --stackGap:8px;         /* separación vertical estándar en móvil */
+    --edgeGap:8px;          /* margen lateral en móvil */
     --radiusCard:12px;
-    --edgeGap:8px;
   }
 
   html,body{height:100%;margin:0}
@@ -35,13 +34,13 @@
     display:inline-flex; gap:8px; flex-wrap:wrap; align-items:center;
     background:rgba(255,255,255,.85); backdrop-filter:blur(6px);
     border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:10px 12px; z-index:10;
-    width:max-content; max-width:calc(100vw - 24px);
+    width:max-content; max-width:calc(100vw - 24px);  /* escritorio */
   }
   #topbar button{background:#1e68ff;border:none;color:white;padding:6px 10px;border-radius:6px;cursor:pointer}
-  #topbar small{opacity:.7}
   #fileInput{display:none}
   #logo{height:48px;margin-right:12px;border-radius:6px}
-  label{display:flex;align-items:center;gap:6px}
+  label, small {display:flex;align-items:center;gap:6px}
+  #fileNameTag{font-size:12px; opacity:.75; background:#f2f4f8; border:1px solid #dfe3eb; border-radius:8px; padding:3px 6px;}
 
   /* Right side panel (ACCIONABLES) */
   #sidepanel{
@@ -72,37 +71,32 @@
   }
   .act-row input[type="range"]{ width:200px }
   .muted{opacity:.7;font-size:12px}
-  .act-row select{
-    width:200px; padding:6px 8px;
-    border:1px solid #ccc; border-radius:6px;
-    background:#f5f5f5; color:#111; font:inherit;
-  }
 
-  /* VARIANTES */
-  #variantsCard{ z-index:9 }
-  #variantsPanel .act-row{ margin-top:6px }
-
-  /* Swatch bar (móvil) */
-  .swatch-bar{
-    display:none; /* visible solo en móvil */
-    gap:10px; align-items:center; justify-content:center; flex-wrap:wrap;
-    padding:6px 0 2px;
+  /* Swatches (variantes) */
+  #swatchBar{
+    position:fixed; left:50%;
+    transform:translateX(-50%);
+    display:flex; gap:10px; align-items:center; justify-content:center;
+    z-index:8;
+    padding:6px 8px;
+    background:rgba(255,255,255,.88);
+    border:1px solid rgba(0,0,0,.08);
+    border-radius:999px;
+    box-shadow:0 6px 20px rgba(0,0,0,.12);
   }
   .swatch{
-    width:42px; height:42px; border-radius:999px;
-    border:2px solid rgba(0,0,0,.15);
-    box-shadow:0 1px 3px rgba(0,0,0,.1);
-    position:relative; cursor:pointer; overflow:hidden;
+    width:40px; height:40px; border-radius:999px; overflow:hidden; position:relative;
+    border:1px solid rgba(0,0,0,.12); cursor:pointer; flex:0 0 40px;
+    display:inline-flex; align-items:center; justify-content:center;
     background:#eee;
   }
-  .swatch-inner{
-    position:absolute; inset:-2%;  /* hace la imagen ligeramente más grande para cubrir el círculo */
-    border-radius:inherit;
-    background-size:cover; background-position:center; background-repeat:no-repeat;
-    transform:translateZ(0);
+  .swatch img{
+    width:110%; height:110%; /* cubre completamente el círculo incluso con bordes */
+    object-fit:cover; pointer-events:none;
+    transform:translateZ(0); /* evita blur en móviles */
   }
   .swatch.selected{
-    outline:2px solid #2b7aff; outline-offset:2px;
+    box-shadow:0 0 0 2px white, 0 0 0 4px #2b7aff;
     border-color:transparent;
   }
 
@@ -114,8 +108,7 @@
     display:flex; flex-wrap:wrap; align-items:center; gap:10px; z-index:5
   }
   #stats .tag{background:#f2f4f8;border:1px solid #dfe3eb;border-radius:8px;padding:4px 8px;font-size:12px}
-  #stats button{background:#eee;border:1px solid #ccc;border-radius:12px;padding:6px 12px;cursor:pointer;font-weight:700}
-  #stat-variantLabel{ margin-left:4px; opacity:.8 }
+  #stats button{background:#eee;border:1px solid #ccc;border-radius:6px;padding:4px 8px;cursor:pointer}
 
   #drop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;border:2px dashed #2a2f36;border-radius:16px;background:rgba(30,104,255,.08);color:#1e68ff;pointer-events:auto;z-index:999}
   canvas{display:block;width:100%;height:100%}
@@ -123,36 +116,30 @@
   /* ---------- Mobile tweaks ---------- */
   @media (max-width: 640px){
     :root{ --stackGap:8px; --edgeGap:8px; }
-
     #logo{height:36px}
 
-    /* Topbar: márgenes simétricos, no a pantalla completa */
+    /* topbar con márgenes simétricos y ancho auto */
     #topbar{
       left:var(--edgeGap); right:var(--edgeGap); top:var(--stackGap);
-      width:auto; max-width:unset; border-radius:12px;
+      width:auto; max-width:unset;
+      border-radius:12px;
       display:flex; flex-wrap:wrap; gap:8px;
     }
 
     /* Ocultar ACCIONABLES en móvil */
     #animCard{ display:none !important; }
 
-    /* VARIANTES card en móvil: debajo del topbar,
-       con la misma separación que del borde superior */
-    #variantsCard.mobile{
-      position:fixed;
+    /* Swatches debajo de la top row, centrados y con mismo gap que arriba */
+    #swatchBar{
       left:var(--edgeGap); right:var(--edgeGap);
+      transform:none;
       top:calc(var(--stackGap) + var(--topbarH) + var(--stackGap));
-      width:auto; max-width:unset;
+      margin:0 auto;
+      width:auto; justify-content:center;
       border-radius:12px;
-      padding:8px 10px;
+      gap:8px;
     }
-    #variantsCard.mobile details.block>summary{
-      padding:8px 10px; font-size:13px;
-    }
-
-    /* En móvil se muestra la barra de swatches y se oculta el select */
-    .swatch-bar{ display:flex; }
-    #variantsSelectRow{ display:none; }
+    .swatch{ width:36px; height:36px; flex:0 0 36px; }
 
     /* Barra inferior móvil */
     #stats{ left:0; right:0; bottom:0; border-radius:0; padding:8px 10px; gap:8px; }
@@ -176,34 +163,27 @@
     <label style="display:none"><input type="checkbox" id="doorsToggle"> All Doors Open</label>
     <label style="display:none"><input type="checkbox" id="autoHideToggle" checked> Auto-hide front wall</label>
     <label style="display:none"><input type="checkbox" id="hideCeilingToggle" checked> Hide ceiling</label>
-    <small id="msg"></small>
+    <!-- Nombre del archivo (limpio) en lugar del auto-rotate -->
+    <small id="fileNameTag" title="File name" style="display:none">—</small>
   </div>
 
-  <!-- Side panel: ACCIONABLES + VARIANTES (desktop) -->
+  <!-- Side panel: ACCIONABLES (sigue igual en desktop) -->
   <div id="sidepanel" style="display:none">
     <details id="animCard" class="block card" open style="display:none">
       <summary>ACCIONABLES</summary>
       <div class="panel" id="animPanel"></div>
     </details>
-
-    <details id="variantsCard" class="block card" open style="display:none">
-            <div class="panel" id="variantsPanel">
-        <!-- Desktop select -->
-        <div class="act-row" id="variantsSelectRow">
-          <div>Material</div>
-          <select id="variantSelect"></select>
-        </div>
-        <!-- Mobile swatches -->
-        <div class="swatch-bar" id="swatchBar"></div>
-      </div>
-    </details>
   </div>
+
+  <!-- Swatches (móvil debajo del topbar, desktop centrado abajo) -->
+  <div id="swatchBar" style="display:none"></div>
 
   <!-- Bottom stats / performance -->
   <div id="stats">
     <button id="statsToggle" aria-expanded="false" style="display:none">Performance</button>
-    <span id="stat-variantLabel" class="tag">Variant: —</span>
     <div id="statsContent">
+      <span class="tag">Performance</span>
+      <span class="tag" id="stat-variantName">Variant: —</span>
       <span class="tag" id="stat-model">Model: —</span>
       <span class="tag" id="stat-size">Size: —</span>
       <span class="tag" id="stat-tris">Tris: —</span>
@@ -212,7 +192,7 @@
       <span class="tag" id="stat-calls">Calls: —</span>
       <span class="tag" id="stat-geoms">Geoms: —</span>
       <span class="tag" id="stat-text">Tex: —</span>
-      <span class="tag" id="stat-file">File: —</span>
+      <span class="tag" id="stat-rot" style="display:none"></span>
       <span class="tag" id="stat-bytes">GLB: —</span>
       <button id="stats-reset" title="Reset renderer.info()">Reset</button>
     </div>
@@ -241,7 +221,8 @@ import { RoomEnvironment }from 'three/addons/environments/RoomEnvironment.js';
 
 /* ---------- layout helper ---------- */
 const topbar = document.getElementById('topbar');
-const variantsCard = document.getElementById('variantsCard');
+const swatchBar = document.getElementById('swatchBar');
+const fileNameTag = document.getElementById('fileNameTag');
 function updateTopbarVar(){
   const h = topbar?.offsetHeight || 72;
   document.documentElement.style.setProperty('--topbarH', `${h}px`);
@@ -250,23 +231,29 @@ new ResizeObserver(updateTopbarVar).observe(topbar);
 addEventListener('load', updateTopbarVar);
 addEventListener('resize', updateTopbarVar);
 
-/* mover VARIANTES según breakpoint */
+/* posicionar swatches según breakpoint */
 const mql = window.matchMedia('(max-width: 640px)');
-function placeVariantsForViewport(){
-  if(!variantsCard) return;
+function placeSwatchesForViewport(){
+  if(!swatchBar) return;
   if(mql.matches){
-    variantsCard.classList.add('mobile');
-    variantsCard.style.display = variantsCard.dataset.hasVariants === '1' ? '' : 'none';
-    document.body.appendChild(variantsCard);
+    // móvil: debajo de topbar
+    swatchBar.style.top = `calc(var(--stackGap) + var(--topbarH) + var(--stackGap))`;
+    swatchBar.style.left = 'var(--edgeGap)';
+    swatchBar.style.right = 'var(--edgeGap)';
+    swatchBar.style.bottom = '';
+    swatchBar.style.transform = 'none';
+    swatchBar.style.margin = '0 auto';
   } else {
-    variantsCard.classList.remove('mobile');
-    const sidepanel = document.getElementById('sidepanel');
-    sidepanel.appendChild(variantsCard);
-    variantsCard.style.display = variantsCard.dataset.hasVariants === '1' ? '' : 'none';
+    // desktop: centrado abajo
+    swatchBar.style.left = '50%';
+    swatchBar.style.right = '';
+    swatchBar.style.transform = 'translateX(-50%)';
+    swatchBar.style.bottom = '76px';  // encima del panel de performance
+    swatchBar.style.top = '';
+    swatchBar.style.margin = '0';
   }
-  updateTopbarVar();
 }
-mql.addEventListener('change', placeVariantsForViewport);
+mql.addEventListener('change', placeSwatchesForViewport);
 
 /* ---------- password gate ---------- */
 const VIEWER_PASSWORD = 'demo';
@@ -308,12 +295,12 @@ scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0,0.6,0);
 controls.enableDamping = true;
-controls.autoRotate = false;
+controls.autoRotate = false; // eliminado del UI
 controls.autoRotateSpeed = 0.8;
 
-/* Luces (más exposición indirecta) */
-scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 1.3));
-scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+/* Luces */
+scene.add(new THREE.HemisphereLight(0xffffff, 0x88aadd, 1.2)); // más “rebote” desde abajo
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));             // un poquito más de base
 
 /* Luz direccional para sombras (modo asset) */
 let dirLight = null;
@@ -336,23 +323,21 @@ const objectToGroup = new Map(); // for morph groups
 const objectToDoor  = new Map(); // for door groups
 let lastGLBBytes = null;
 
-/* Variants UI refs */
-const variantSelect = document.getElementById('variantSelect');
-const swatchBar     = document.getElementById('swatchBar');
-variantsCard.dataset.hasVariants = '0';
+/* Variants (swatches) */
+let variantsInfo = { names: [], selected: null };
 
 /* ---------- Bottom stats / performance elements ---------- */
-const statVariant = document.getElementById('stat-variantLabel');
-const statModel = document.getElementById('stat-model');
-const statSize  = document.getElementById('stat-size');
-const statTris  = document.getElementById('stat-tris');
-const statFPS   = document.getElementById('stat-fps');
-const statMS    = document.getElementById('stat-ms');
-const statCalls = document.getElementById('stat-calls');
-const statGeoms = document.getElementById('stat-geoms');
-const statText  = document.getElementById('stat-text');
-const statFile  = document.getElementById('stat-file');
-const statBytes = document.getElementById('stat-bytes');
+const statModel  = document.getElementById('stat-model');
+const statSize   = document.getElementById('stat-size');
+const statTris   = document.getElementById('stat-tris');
+const statFPS    = document.getElementById('stat-fps');
+const statMS     = document.getElementById('stat-ms');
+const statCalls  = document.getElementById('stat-calls');
+const statGeoms  = document.getElementById('stat-geoms');
+const statText   = document.getElementById('stat-text');
+const statRot    = document.getElementById('stat-rot');
+const statBytes  = document.getElementById('stat-bytes');
+const statVarTag = document.getElementById('stat-variantName');
 document.getElementById('stats-reset')?.addEventListener('click', ()=> renderer.info.reset());
 let fpsEMA = 0;
 
@@ -370,6 +355,7 @@ function setUIMode(mode){
     if(autoH) autoH.style.display = 'none';
     if(ceil)  ceil.style.display  = 'none';
     side.style.display = 'none';
+    swatchBar.style.display = 'none';
     removeShadowSystem();
     return;
   }
@@ -383,12 +369,12 @@ function setUIMode(mode){
   if(!isAsset) removeShadowSystem();
 
   updateTopbarVar();
-  placeVariantsForViewport();
+  placeSwatchesForViewport();
 }
 setUIMode('clean');
 
 /* ---------- helpers ---------- */
-function setMsg(t){ document.getElementById('msg').textContent = t || ''; }
+function setMsg(t){ /* deprecado para nombre, usamos fileNameTag */ }
 function disposeMat(m){ ['map','normalMap','roughnessMap','metalnessMap','occlusionMap','emissiveMap'].forEach(k=>m[k]?.dispose?.()); }
 function clearModel(){
   if(!current) return;
@@ -401,15 +387,16 @@ function clearModel(){
   statSize.textContent  = 'Size: —';
   statTris.textContent  = 'Tris: —';
   statBytes.textContent = 'GLB: —';
-  statFile.textContent  = 'File: —';
-  statVariant.textContent = 'Variant: —';
+  statVarTag.textContent = 'Variant: —';
   mixer = null;
 
-  // limpiar UI variantes
-  variantSelect.innerHTML = '';
-  swatchBar.innerHTML = '';
-  variantsCard.style.display = 'none';
-  variantsCard.dataset.hasVariants = '0';
+  // nombre de archivo
+  fileNameTag.style.display='none';
+  fileNameTag.textContent='—';
+
+  // swatches
+  swatchBar.innerHTML=''; swatchBar.style.display='none';
+  variantsInfo = { names: [], selected: null };
 }
 function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geometry; t += g?.index ? g.index.count/3 : (g?.attributes?.position?.count||0)/3; }}); return Math.round(t); }
 function updateStats(sizeVec){
@@ -424,19 +411,44 @@ function humanBytes(b){
   while(n>=1024 && i<u.length-1){ n/=1024; i++; }
   return `${n.toFixed(n<10&&i>0?1:0)} ${u[i]}`;
 }
-function cleanName(name){
+function cleanModelName(s){
+  if(!s) return '—';
+  const noPref = s.replace(/^model_/i,'');
+  return noPref.replace(/\.(glb|gltf)$/i,'');
+}
+function extractIndex(name){
+  if(!name) return null;
+  let match = name.match(/door(\d+)/i); if(match) return match[1];
+  match = name.match(/panel(\d+)/i);    if(match) return match[1];
+  match = name.match(/(\d+)(?!.*\d)/);  return match ? match[1] : null;
+}
+function extractSide(name){
+  if(!name) return null;
+  if(/leftpanel/i.test(name) || /_left/i.test(name)) return 'left';
+  if(/rightpanel/i.test(name) || /_right/i.test(name)) return 'right';
+  return null;
+}
+function doorGroupKey(name){
   if(!name) return '';
-  const base = name.split('/').pop();
-  return base.replace(/^model_/i,'').replace(/\.(glb|gltf)$/i,'');
+  const m = name.match(/^(?:door_)?(.+)$/i);
+  return (m?m[1]:name).toLowerCase();
 }
-function niceLabel(s){
-  if(!s) return '';
-  const t = s.replace(/^swatch_/i,'').replace(/_/g,' ');
-  return t.charAt(0).toUpperCase() + t.slice(1);
+function stripDoorPrefix(s){ return s?.replace(/^door_/i,'') ?? s; }
+function guessModeFromFilename(name){
+  if(!name) return null;
+  const lower = name.toLowerCase();
+  if(/_(00|0[0-9])\.(glb|gltf)$/.test(lower)) return 'room';
+  return null;
 }
-function variantToSwatchUrl(variantName){
-  // Mapea "Wood" -> /swatches/swatch_Wood.jpg (respetando tu convención)
-  return `./swatches/swatch_${variantName}.jpg`;
+function reparentKeepWorld(child, newParent){
+  child.updateMatrixWorld(true);
+  const childWorld = child.matrixWorld.clone();
+  newParent.updateMatrixWorld(true);
+  newParent.add(child);
+  const invParentWorld = newParent.matrixWorld.clone().invert();
+  const local = new THREE.Matrix4().multiplyMatrices(invParentWorld, childWorld);
+  local.decompose(child.position, child.quaternion, child.scale);
+  child.updateMatrixWorld(true);
 }
 
 /* ---------- puertas (rooms) — estático ---------- */
@@ -446,8 +458,8 @@ function findDoorPanels(nodes){
     const left = /leftpanel/i.test(o.name);
     o.userData.closedQ  = o.quaternion.clone();
     o.userData.sign     = left ? +1 : -1;
-    o.userData.groupKey = (o.name||'').toLowerCase();
-    o.userData.idx      = (o.name.match(/(\d+)(?!.*\d)/)||[])[1];
+    o.userData.groupKey = doorGroupKey(o.name);
+    o.userData.idx      = extractIndex(o.name);
     o.userData.side     = left ? 'left' : 'right';
     return o;
   });
@@ -460,7 +472,7 @@ function findDoorVariantPairs(nodes){
     const state = m[1].toLowerCase();
     const side  = m[2].toLowerCase();
     const idx   = m[3];
-    const group = (o.name||'').toLowerCase();
+    const group = doorGroupKey(o.name);
     const key   = `${group}|${side}|${idx}`;
     if(!map.has(key)) map.set(key, { open:null, closed:null, group, side, idx });
     map.get(key)[state] = o;
@@ -470,9 +482,9 @@ function findDoorVariantPairs(nodes){
 function getDoorRootsByIndex(groupKeyPref, idx, sidePref){
   const roots = [];
   doorPanels.forEach(d=>{
-    const di   = d.userData.idx;
-    const side = d.userData.side;
-    const gk   = d.userData.groupKey;
+    const di   = d.userData.idx ?? extractIndex(d.name);
+    const side = d.userData.side ?? extractSide(d.name);
+    const gk   = d.userData.groupKey ?? doorGroupKey(d.name);
     if(String(di) === String(idx)
       && (!sidePref || sidePref===side)
       && (!groupKeyPref || groupKeyPref===gk)) roots.push(d);
@@ -480,9 +492,9 @@ function getDoorRootsByIndex(groupKeyPref, idx, sidePref){
   doorVariantPairs.forEach(pair=>{
     const { open, closed, group, side, idx:pi } = pair;
     [open, closed].filter(Boolean).forEach(n=>{
-      const di = pi;
-      const gk = group;
-      const sd = side;
+      const di = pi ?? extractIndex(n.name);
+      const gk = group ?? doorGroupKey(n.name);
+      const sd = side  ?? extractSide(n.name);
       if(String(di) === String(idx)
         && (!sidePref || sidePref===sd)
         && (!groupKeyPref || groupKeyPref===gk)) roots.push(n);
@@ -504,17 +516,18 @@ function pickPreferredDoorRoot(idx, sidePref, groupKeyPref){
 function reparentHardwareToDoors(nodes, _doorPanels){
   const hardware = nodes.filter(o => /(handle|hinge|knob|hardware)/i.test(o.name));
   hardware.forEach(h=>{
-    const idx   = (h.name.match(/(\d+)(?!.*\d)/)||[])[1];
-    const sideM = /left/i.test(h.name) ? 'left' : (/right/i.test(h.name) ? 'right' : null);
+    const idx          = extractIndex(h.name);
+    const sidePref     = extractSide(h.name);
+    const groupKeyPref = doorGroupKey(h.name);
 
-    let target = (idx!=null) ? pickPreferredDoorRoot(idx, sideM, (h.name||'').toLowerCase()) : null;
+    let target = (idx!=null) ? pickPreferredDoorRoot(idx, sidePref, groupKeyPref) : null;
 
     if(!target){
       let candidates = _doorPanels;
-      const sameGroup = _doorPanels.filter(d => (d.userData.groupKey || '') === (h.name||'').toLowerCase());
+      const sameGroup = _doorPanels.filter(d => (d.userData.groupKey ?? doorGroupKey(d.name)) === groupKeyPref);
       if(sameGroup.length) candidates = sameGroup;
-      if(sideM){
-        const filtered = candidates.filter(d=> (d.userData.side)===sideM);
+      if(sidePref){
+        const filtered = candidates.filter(d=> (d.userData.side ?? extractSide(d.name))===sidePref);
         if(filtered.length) candidates = filtered;
       }
       let best=null, bestDist=Infinity;
@@ -527,16 +540,7 @@ function reparentHardwareToDoors(nodes, _doorPanels){
       target = best;
     }
 
-    if(target && h.parent !== target){
-      h.updateMatrixWorld(true);
-      const childWorld = h.matrixWorld.clone();
-      target.updateMatrixWorld(true);
-      target.add(h);
-      const invParentWorld = target.matrixWorld.clone().invert();
-      const local = new THREE.Matrix4().multiplyMatrices(invParentWorld, childWorld);
-      local.decompose(h.position, h.quaternion, h.scale);
-      h.updateMatrixWorld(true);
-    }
+    if(target && h.parent !== target) reparentKeepWorld(h, target);
   });
 }
 function enforceDoorVariantExclusivity(defaultState='closed'){
@@ -605,7 +609,7 @@ function buildDoorControlsFromClips(root, clips){
       targetNode.traverse(n=> objectToDoor.set(n, doorGroups.length));
 
       doorGroups.push({
-        name: (targetNode.name||'').replace(/^door_/i,''),
+        name: stripDoorPrefix(targetNode.name),
         clip, action, node: targetNode,
         duration: clip.duration, value: 0, slider: null
       });
@@ -641,7 +645,7 @@ function renderActionsPanel(){
     const meshes = collectMorphMeshes(ar); if(!meshes.length) return;
     const morphNames = uniqueNamesFromMeshes(meshes); if(!morphNames.length) return;
     ar.traverse(n=>{ objectToGroup.set(n, gi); });
-    groups.push({ name: ar.name, node: ar, meshes, morphNames, activeMorph: morphNames[0], sliderEl:null });
+    groups.push({ name: ar.name, node: ar, meshes, morphNames, activeMorph: morphNames[0], sliderEl:null, selectEl:null, tween:null });
   });
   animGroups = groups;
 
@@ -661,6 +665,8 @@ function renderActionsPanel(){
 
   document.getElementById('animCard').style.display='';
 }
+
+/* ---------- Door anim helpers ---------- */
 function setDoorValue(group, value){
   group.value = THREE.MathUtils.clamp(value, 0, 1);
   if(!group.action) return;
@@ -739,23 +745,20 @@ function removeShadowSystem(){
   }
 }
 
-/* ---------- Variants (KHR_materials_variants) ---------- */
+/* ---------- Variants (KHR_materials_variants) -> swatches ---------- */
 async function setupVariants(gltf){
-  variantSelect.innerHTML = '';
-  swatchBar.innerHTML = '';
-  variantsCard.style.display = 'none';
-  variantsCard.dataset.hasVariants = '0';
-  statVariant.textContent = 'Variant: —';
+  swatchBar.innerHTML=''; swatchBar.style.display='none';
+  variantsInfo = { names: [], selected: null };
 
   const parser = gltf.parser;
   const json   = parser.json;
   const rootExt = json.extensions && json.extensions.KHR_materials_variants;
   if(!rootExt || !rootExt.variants || !rootExt.variants.length){
-    placeVariantsForViewport();
     return;
   }
 
   const variantNames = rootExt.variants.map(v => v.name);
+  variantsInfo.names = variantNames;
 
   // cache materiales
   const matCache = new Map();
@@ -796,45 +799,44 @@ async function setupVariants(gltf){
     });
     await Promise.all(pending);
 
-    // UI: marcar selección
-    Array.from(swatchBar.children).forEach(btn=>{
-      btn.classList.toggle('selected', btn.dataset.variant === name);
-    });
-    statVariant.textContent = `Variant: ${niceLabel(name)}`;
+    // actualizar UI
+    variantsInfo.selected = name;
+    statVarTag.textContent = `Variant: ${name}`;
+    Array.from(swatchBar.children).forEach(el => el.classList.toggle('selected', el.dataset.varName === name));
   }
 
-  // construir opciones (desktop)
-  variantNames.forEach((n, i)=>{
-    const opt = document.createElement('option');
-    opt.value = n; opt.textContent = n;
-    if (i===0) opt.selected = true;
-    variantSelect.appendChild(opt);
+  // crear swatches
+  const toTitle = (s)=> s.charAt(0).toUpperCase() + s.slice(1);
+  const swatchSrcFor = (name)=>{
+    // coincidencia insensible a mayúsculas y sin prefijo "swatch_"
+    const base = toTitle(name.replace(/^swatch_/i,''));
+    return `swatches/swatch_${base}.jpg`;
+  };
+
+  variantNames.forEach((name, i)=>{
+    const btn = document.createElement('button');
+    btn.className = 'swatch';
+    btn.type = 'button';
+    btn.dataset.varName = name;
+
+    const img = document.createElement('img');
+    img.alt = name;
+    img.src = swatchSrcFor(name);
+    img.onerror = ()=>{ img.style.background = name.toLowerCase().includes('white')?'#eee':'#8b6b3c'; };
+    btn.appendChild(img);
+
+    btn.addEventListener('click', async ()=>{
+      await applyVariant(gltf.scene, name);
+    });
+
+    swatchBar.appendChild(btn);
   });
 
-  // construir swatches (móvil)
-  variantNames.forEach((n, i)=>{
-    const url = variantToSwatchUrl(n);
-    const s = document.createElement('div');
-    s.className = 'swatch';
-    s.dataset.variant = n;
-    const inner = document.createElement('div');
-    inner.className = 'swatch-inner';
-    inner.style.backgroundImage = `url("${url}")`;
-    s.appendChild(inner);
-    s.onclick = ()=> { variantSelect.value = n; applyVariant(gltf.scene, n); };
-    swatchBar.appendChild(s);
-  });
-
-  // mostrar card y ubicar según viewport
-  variantsCard.dataset.hasVariants = '1';
-  variantsCard.style.display = '';
-  placeVariantsForViewport();
+  swatchBar.style.display = '';
+  placeSwatchesForViewport();
 
   // aplicar primera por defecto
   await applyVariant(gltf.scene, variantNames[0]);
-
-  // desktop change
-  variantSelect.onchange = async ()=> { await applyVariant(gltf.scene, variantSelect.value); };
 }
 
 /* ---------- placing ---------- */
@@ -881,10 +883,10 @@ function place(root, clips){
   controls.target.copy(new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3()));
   controls.update();
 
-  statModel.textContent = `Model: ${cleanName(root.name || 'Scene')}`;
+  statModel.textContent = `Model: ${root.name || '(scene)'}`;
   updateStats(size);
   updateTopbarVar();
-  placeVariantsForViewport();
+  placeSwatchesForViewport();
 }
 
 /* ---------- auto-hide wall (rooms) ---------- */
@@ -981,20 +983,23 @@ canvas.addEventListener('pointerup', (e)=>{
 
 /* ---------- loading ---------- */
 function loadBlob(file){
-  setUIMode('clean'); setMsg('Loading local file…'); clearModel();
-  const pre = (file.name && /_(00|0[0-9])\.(glb|gltf)$/i.test(file.name.toLowerCase())) ? 'room' : null;
-  if(pre) setUIMode(pre);
+  setUIMode('clean'); clearModel();
+  const pre = guessModeFromFilename(file.name); if(pre) setUIMode(pre);
   lastGLBBytes = file.size; statBytes.textContent = `GLB: ${humanBytes(lastGLBBytes)}`;
-  statFile.textContent = `File: ${cleanName(file.name)}`;
+
+  // nombre de archivo limpio en topbar
+  const clean = cleanModelName(file.name);
+  fileNameTag.textContent = clean;
+  fileNameTag.style.display = '';
+
   const url = URL.createObjectURL(file);
   loader.load(url, async (g)=>{
-      g.scene.name = g.scene.name || file.name;
       place(g.scene, g.animations||[]);
-      await setupVariants(g);
-      setMsg(cleanName(file.name));
+      await setupVariants(g);               // swatches
+      statModel.textContent = `Model: ${clean}`; // también reflejar acá
       URL.revokeObjectURL(url);
     },
-    undefined, e=>{ console.error(e); setMsg('Error with local file'); });
+    undefined, e=>{ console.error(e); /* opcional: mensaje de error visual */ });
 }
 
 /* ---------- UI ---------- */
@@ -1031,7 +1036,7 @@ function applyStatsMode(){
     statsToggle.style.display = 'inline-flex';
     statsToggle.setAttribute('aria-expanded','false');
   }else{
-    statsEl.classList.add('open');
+    statsEl.classList.add('open'); // visible en desktop
     statsToggle.style.display = 'none';
     statsToggle.setAttribute('aria-expanded','true');
   }
@@ -1040,9 +1045,9 @@ statsToggle.addEventListener('click', ()=>{ if(!isMobile()) return;
   const open = statsEl.classList.toggle('open');
   statsToggle.setAttribute('aria-expanded', open ? 'true':'false');
 });
-addEventListener('resize', ()=>{ applyStatsMode(); placeVariantsForViewport(); updateTopbarVar(); });
+addEventListener('resize', ()=>{ applyStatsMode(); placeSwatchesForViewport(); updateTopbarVar(); });
 applyStatsMode();
-placeVariantsForViewport();
+placeSwatchesForViewport();
 
 /* ---------- resize & loop ---------- */
 function resize(){
@@ -1068,6 +1073,7 @@ renderer.setAnimationLoop(()=>{
   statCalls.textContent = `Calls: ${info.render.calls}`;
   statGeoms.textContent = `Geoms: ${info.memory.geometries}`;
   statText.textContent  = `Tex: ${info.memory.textures}`;
+  // statRot oculto, dejamos como está
 
   if(mixer) mixer.update(dt/1000);
 
