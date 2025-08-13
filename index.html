@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Room Viewer — v0.2.6</title>
+<title>Room Viewer — v0.2.5</title>
 
 <script type="importmap">
 {
@@ -18,8 +18,9 @@
   :root{
     --topbarH:72px;
     --stackGap:8px;
-    --edgeGap:8px;
+    --padCard:10px 12px;
     --radiusCard:12px;
+    --edgeGap:8px;
   }
 
   html,body{height:100%;margin:0}
@@ -28,7 +29,7 @@
     background:#c9c9c9;color:#222
   }
 
-  /* Top bar */
+  /* Top row */
   #topbar{
     position:fixed; left:12px; top:12px;
     display:inline-flex; gap:8px; flex-wrap:wrap; align-items:center;
@@ -37,17 +38,10 @@
     width:max-content; max-width:calc(100vw - 24px);
   }
   #topbar button{background:#1e68ff;border:none;color:white;padding:6px 10px;border-radius:6px;cursor:pointer}
+  #topbar small{opacity:.7}
   #fileInput{display:none}
   #logo{height:48px;margin-right:12px;border-radius:6px}
-  label, small {display:flex;align-items:center;gap:6px}
-  #fileNameTag{
-    font-size:12px; opacity:.85; background:#f2f4f8; border:1px solid #dfe3eb;
-    border-radius:8px; padding:3px 6px; line-height:1.2;
-  }
-  /* +40% en escritorio */
-  @media (min-width: 641px){
-    #fileNameTag{ font-size:calc(12px * 1.4); }
-  }
+  label{display:flex;align-items:center;gap:6px}
 
   /* Side panel (ACCIONABLES) */
   #sidepanel{
@@ -70,7 +64,6 @@
   details.block[open]>summary{background:#f3f6ff;border-color:#ccd9ff}
   .panel{padding:8px 10px}
 
-  /* ACCIONABLES list */
   .act-row{
     display:grid; grid-template-columns: 1fr 200px;
     align-items:center; gap:10px; margin:8px 0;
@@ -79,32 +72,22 @@
   .act-row input[type="range"]{ width:200px }
   .muted{opacity:.7;font-size:12px}
 
-  /* Swatches (variantes) */
-  #swatchBar{
-    position:fixed; left:50%;
-    transform:translateX(-50%);
-    display:flex; gap:10px; align-items:center; justify-content:center;
-    z-index:8;
-    padding:6px 8px;
-    background:rgba(255,255,255,.88);
-    border:1px solid rgba(0,0,0,.08);
-    border-radius:999px;
-    box-shadow:0 6px 20px rgba(0,0,0,.12);
+  /* Swatches */
+  #swatchesBar{
+    position:fixed; left:0; right:0; bottom:72px; /* desktop default */
+    display:flex; justify-content:center; align-items:center; gap:10px;
+    z-index:8; pointer-events:auto;
   }
   .swatch{
-    width:40px; height:40px; border-radius:999px; overflow:hidden; position:relative;
-    border:1px solid rgba(0,0,0,.12); cursor:pointer; flex:0 0 40px;
-    background:#eee;
+    width:42px; height:42px; border-radius:50%; overflow:hidden; position:relative;
+    box-shadow:0 1px 4px rgba(0,0,0,.2); cursor:pointer; border:2px solid transparent;
+    background:#fff;
   }
+  .swatch.selected{ border-color:#1e68ff; }
   .swatch img{
-    position:absolute; inset:0;
-    width:100%; height:100%;
-    object-fit:cover; display:block; pointer-events:none;
-    transform:translateZ(0);
-  }
-  .swatch.selected{
-    box-shadow:0 0 0 2px white, 0 0 0 4px #2b7aff;
-    border-color:transparent;
+    width:100%; height:100%; display:block;
+    object-fit:cover; object-position:center;
+    transform:translateZ(0); /* asegura pintar hasta el borde */
   }
 
   /* Bottom stats / performance */
@@ -114,7 +97,10 @@
     border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:8px 12px;
     display:flex; flex-wrap:wrap; align-items:center; gap:10px; z-index:5
   }
-  #stats .tag{background:#f2f4f8;border:1px solid #dfe3eb;border-radius:8px;padding:4px 8px;font-size:12px}
+  #stats .tag, #variantNow{
+    background:#f2f4f8;border:1px solid #dfe3eb;border-radius:8px;padding:4px 8px;font-size:12px;
+    white-space:nowrap; display:inline-flex; align-items:center; justify-content:center;
+  }
   #stats button{background:#eee;border:1px solid #ccc;border-radius:6px;padding:4px 8px;cursor:pointer}
 
   #drop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;border:2px dashed #2a2f36;border-radius:16px;background:rgba(30,104,255,.08);color:#1e68ff;pointer-events:auto;z-index:999}
@@ -123,53 +109,34 @@
   /* ---------- Mobile tweaks ---------- */
   @media (max-width: 640px){
     :root{ --stackGap:8px; --edgeGap:8px; }
-    #logo{height:36px}
 
-    /* topbar */
+    #logo{height:36px}
     #topbar{
       left:var(--edgeGap); right:var(--edgeGap); top:var(--stackGap);
-      width:auto; max-width:unset;
-      border-radius:12px;
+      width:auto; max-width:unset; border-radius:12px;
       display:flex; flex-wrap:wrap; gap:8px;
     }
-    /* +20% al nombre del archivo en mobile */
-    #fileNameTag{ font-size:calc(12px * 1.2); }
 
     /* Ocultar ACCIONABLES en móvil */
     #animCard{ display:none !important; }
 
-    /* Swatches debajo del topbar, sin “cuadro” de fondo */
-    #swatchBar{
-      left:var(--edgeGap); right:var(--edgeGap);
-      transform:none;
+    /* Swatches en mobile: sin fondo, debajo del topbar */
+    #swatchesBar{
+      bottom:auto;
       top:calc(var(--stackGap) + var(--topbarH) + var(--stackGap));
-      margin:0 auto;
-      width:auto; justify-content:center;
-      gap:8px;
-      background:transparent !important;
-      border:none !important;
-      box-shadow:none !important;
-      padding:0 !important;
-      border-radius:0 !important;
+      left:var(--edgeGap); right:var(--edgeGap);
+      background:transparent; border:0; box-shadow:none;
+      justify-content:center;
     }
-    .swatch{ width:36px; height:36px; flex:0 0 36px; border-radius:999px; }
-    .swatch.selected{ box-shadow:0 0 0 2px white, 0 0 0 4px #2b7aff; }
 
-    /* Barra inferior móvil */
+    /* Stats en mobile */
     #stats{ left:0; right:0; bottom:0; border-radius:0; padding:8px 10px; gap:8px; }
     #statsToggle{ display:inline-flex; align-items:center; color:#333; background:transparent; border:1px solid #cfd6e0; border-radius:999px; padding:6px 12px; font-weight:600; cursor:pointer; }
-    /* Mostrar el nombre de la variante al lado del botón Performance */
-    #stat-variantNameMobile{ display:inline-flex; }
-    /* Ocultar el “Model” pill en mobile */
-    #stat-model{ display:none; }
-
     #statsContent{ display:none; }
     #stats.open #statsContent{
-      display:grid;
-      grid-template-columns: repeat(5, auto);  /* más columnas -> 2 filas */
-      column-gap:6px; row-gap:4px; align-items:center;
+      display:grid; grid-template-columns: repeat(4, auto); column-gap:6px; row-gap:4px; align-items:center;
     }
-    #stats .tag{ padding:3px 6px; font-size:11px; line-height:1.15 }
+    #stats .tag, #variantNow{ padding:3px 6px; font-size:11px; line-height:1.15 }
     #stats #stats-reset{ padding:3px 6px; font-size:11px }
   }
 </style>
@@ -184,11 +151,12 @@
     <label style="display:none"><input type="checkbox" id="doorsToggle"> All Doors Open</label>
     <label style="display:none"><input type="checkbox" id="autoHideToggle" checked> Auto-hide front wall</label>
     <label style="display:none"><input type="checkbox" id="hideCeilingToggle" checked> Hide ceiling</label>
-    <!-- Nombre del archivo (limpio) -->
-    <small id="fileNameTag" title="File name" style="display:none">—</small>
+    <!-- Global -->
+    <label style="display:none"><input type="checkbox" id="autoRotateToggle"> Auto-rotate</label>
+    <small id="msg"></small>
   </div>
 
-  <!-- Side panel: ACCIONABLES (desktop) -->
+  <!-- Side panel (ACCIONABLES) -->
   <div id="sidepanel" style="display:none">
     <details id="animCard" class="block card" open style="display:none">
       <summary>ACCIONABLES</summary>
@@ -196,19 +164,14 @@
     </details>
   </div>
 
-  <!-- Swatches -->
-  <div id="swatchBar" style="display:none"></div>
+  <!-- Swatches (mobile/desktop) -->
+  <div id="swatchesBar" style="display:none"></div>
 
   <!-- Bottom stats / performance -->
   <div id="stats">
     <button id="statsToggle" aria-expanded="false" style="display:none">Performance</button>
-    <!-- Variante al lado de performance (solo visible en mobile por CSS) -->
-    <span class="tag" id="stat-variantNameMobile" style="display:none">Variant: —</span>
-
+    <span id="variantNow" class="tag" title="Selected variant">Variant: —</span>
     <div id="statsContent">
-      <!-- En desktop, la variante queda como tag dentro del cuadro -->
-      <span class="tag" id="stat-variantName">Variant: —</span>
-
       <span class="tag" id="stat-model">Model: —</span>
       <span class="tag" id="stat-size">Size: —</span>
       <span class="tag" id="stat-tris">Tris: —</span>
@@ -217,7 +180,6 @@
       <span class="tag" id="stat-calls">Calls: —</span>
       <span class="tag" id="stat-geoms">Geoms: —</span>
       <span class="tag" id="stat-text">Tex: —</span>
-      <span class="tag" id="stat-rot" style="display:none"></span>
       <span class="tag" id="stat-bytes">GLB: —</span>
       <button id="stats-reset" title="Reset renderer.info()">Reset</button>
     </div>
@@ -246,8 +208,7 @@ import { RoomEnvironment }from 'three/addons/environments/RoomEnvironment.js';
 
 /* ---------- layout helper ---------- */
 const topbar = document.getElementById('topbar');
-const swatchBar = document.getElementById('swatchBar');
-const fileNameTag = document.getElementById('fileNameTag');
+const swatchesBar = document.getElementById('swatchesBar');
 function updateTopbarVar(){
   const h = topbar?.offsetHeight || 72;
   document.documentElement.style.setProperty('--topbarH', `${h}px`);
@@ -255,30 +216,6 @@ function updateTopbarVar(){
 new ResizeObserver(updateTopbarVar).observe(topbar);
 addEventListener('load', updateTopbarVar);
 addEventListener('resize', updateTopbarVar);
-
-/* posicionar swatches según breakpoint */
-const mql = window.matchMedia('(max-width: 640px)');
-function placeSwatchesForViewport(){
-  if(!swatchBar) return;
-  if(mql.matches){
-    // móvil: debajo de topbar
-    swatchBar.style.top = `calc(var(--stackGap) + var(--topbarH) + var(--stackGap))`;
-    swatchBar.style.left = 'var(--edgeGap)';
-    swatchBar.style.right = 'var(--edgeGap)';
-    swatchBar.style.bottom = '';
-    swatchBar.style.transform = 'none';
-    swatchBar.style.margin = '0 auto';
-  } else {
-    // desktop: centrado abajo
-    swatchBar.style.left = '50%';
-    swatchBar.style.right = '';
-    swatchBar.style.transform = 'translateX(-50%)';
-    swatchBar.style.bottom = '76px';  // encima del panel de performance
-    swatchBar.style.top = '';
-    swatchBar.style.margin = '0';
-  }
-}
-mql.addEventListener('change', placeSwatchesForViewport);
 
 /* ---------- password gate ---------- */
 const VIEWER_PASSWORD = 'demo';
@@ -315,7 +252,7 @@ const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 100)
 camera.position.set(2,1.2,2);
 
 const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.035).texture; // un poco más luminosa
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0,0.6,0);
@@ -323,9 +260,8 @@ controls.enableDamping = true;
 controls.autoRotate = false;
 controls.autoRotateSpeed = 0.8;
 
-/* Luces (un poco más de luz ambiental/hemisférica) */
-scene.add(new THREE.HemisphereLight(0xffffff, 0x88aadd, 1.2));
-scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+scene.add(new THREE.HemisphereLight(0xffffff, 0.9));   // ↑ más contribución
+scene.add(new THREE.AmbientLight(0xffffff, 0.35));
 
 /* Luz direccional para sombras (modo asset) */
 let dirLight = null;
@@ -341,29 +277,28 @@ let mixer   = null;
 let allNodes = [], doorPanels = [], doorVariantPairs = [], ceilings = [], wallRoots = [];
 let lastHiddenWalls = new Set();
 let assetRoot = null;
-let animGroups = [];             // morph groups
-let doorGroups = [];             // door groups from clips
+let animGroups = [];
+let doorGroups = [];
 let shadowPlane = null;
-const objectToGroup = new Map(); // for morph groups
-const objectToDoor  = new Map(); // for door groups
+const objectToGroup = new Map();
+const objectToDoor  = new Map();
 let lastGLBBytes = null;
 
-/* Variants (swatches) */
-let variantsInfo = { names: [], selected: null };
+/* Variants / swatches */
+let variantNames = [];
+let currentVariant = null;
 
 /* ---------- Bottom stats / performance elements ---------- */
-const statModel  = document.getElementById('stat-model');
-const statSize   = document.getElementById('stat-size');
-const statTris   = document.getElementById('stat-tris');
-const statFPS    = document.getElementById('stat-fps');
-const statMS     = document.getElementById('stat-ms');
-const statCalls  = document.getElementById('stat-calls');
-const statGeoms  = document.getElementById('stat-geoms');
-const statText   = document.getElementById('stat-text');
-const statRot    = document.getElementById('stat-rot');
-const statBytes  = document.getElementById('stat-bytes');
-const statVarTag = document.getElementById('stat-variantName');
-const statVarTagMobile = document.getElementById('stat-variantNameMobile');
+const statModel = document.getElementById('stat-model');
+const statSize  = document.getElementById('stat-size');
+const statTris  = document.getElementById('stat-tris');
+const statFPS   = document.getElementById('stat-fps');
+const statMS    = document.getElementById('stat-ms');
+const statCalls = document.getElementById('stat-calls');
+const statGeoms = document.getElementById('stat-geoms');
+const statText  = document.getElementById('stat-text');
+const statBytes = document.getElementById('stat-bytes');
+const variantNow= document.getElementById('variantNow');
 document.getElementById('stats-reset')?.addEventListener('click', ()=> renderer.info.reset());
 let fpsEMA = 0;
 
@@ -381,25 +316,22 @@ function setUIMode(mode){
     if(autoH) autoH.style.display = 'none';
     if(ceil)  ceil.style.display  = 'none';
     side.style.display = 'none';
-    swatchBar.style.display = 'none';
     removeShadowSystem();
-    return;
+  }else{
+    const isAsset = (mode === 'asset');
+    if(doors) doors.style.display = isAsset ? 'none' : '';
+    if(autoH) autoH.style.display = isAsset ? 'none' : '';
+    if(ceil)  ceil.style.display  = isAsset ? 'none' : '';
+    side.style.display = isAsset ? '' : 'none';
+    animCard.style.display = isAsset ? '' : 'none';
+    if(!isAsset) removeShadowSystem();
   }
-  const isAsset = (mode === 'asset');
-  if(doors) doors.style.display = isAsset ? 'none' : '';
-  if(autoH) autoH.style.display = isAsset ? 'none' : '';
-  if(ceil)  ceil.style.display  = isAsset ? 'none' : '';
-
-  side.style.display = isAsset ? '' : 'none';
-  animCard.style.display = isAsset ? '' : 'none';
-  if(!isAsset) removeShadowSystem();
-
   updateTopbarVar();
-  placeSwatchesForViewport();
 }
 setUIMode('clean');
 
 /* ---------- helpers ---------- */
+function setMsg(t){ document.getElementById('msg').textContent = t || ''; }
 function disposeMat(m){ ['map','normalMap','roughnessMap','metalnessMap','occlusionMap','emissiveMap'].forEach(k=>m[k]?.dispose?.()); }
 function clearModel(){
   if(!current) return;
@@ -412,15 +344,11 @@ function clearModel(){
   statSize.textContent  = 'Size: —';
   statTris.textContent  = 'Tris: —';
   statBytes.textContent = 'GLB: —';
-  statVarTag.textContent = 'Variant: —';
-  statVarTagMobile.textContent = 'Variant: —';
   mixer = null;
 
-  fileNameTag.style.display='none';
-  fileNameTag.textContent='—';
-
-  swatchBar.innerHTML=''; swatchBar.style.display='none';
-  variantsInfo = { names: [], selected: null };
+  // swatches
+  swatchesBar.innerHTML = ''; swatchesBar.style.display='none';
+  variantNames = []; currentVariant = null; setVariantNowLabel(null);
 }
 function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geometry; t += g?.index ? g.index.count/3 : (g?.attributes?.position?.count||0)/3; }}); return Math.round(t); }
 function updateStats(sizeVec){
@@ -435,10 +363,12 @@ function humanBytes(b){
   while(n>=1024 && i<u.length-1){ n/=1024; i++; }
   return `${n.toFixed(n<10&&i>0?1:0)} ${u[i]}`;
 }
-function cleanModelName(s){
-  if(!s) return '—';
-  const noPref = s.replace(/^model_/i,'');
-  return noPref.replace(/\.(glb|gltf)$/i,'');
+function prettyName(fileName){
+  if(!fileName) return '—';
+  return fileName.replace(/^model_/i,'').replace(/\.(glb|gltf)$/i,'');
+}
+function setVariantNowLabel(name){
+  variantNow.textContent = `Variant: ${name ?? '—'}`;
 }
 function extractIndex(name){
   if(!name) return null;
@@ -689,8 +619,6 @@ function renderActionsPanel(){
 
   document.getElementById('animCard').style.display='';
 }
-
-/* ---------- Door anim helpers ---------- */
 function setDoorValue(group, value){
   group.value = THREE.MathUtils.clamp(value, 0, 1);
   if(!group.action) return;
@@ -717,7 +645,7 @@ function ensureShadowSystem(){
   if(!assetRoot) return;
 
   if(!dirLight){
-    dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    dirLight = new THREE.DirectionalLight(0xffffff, 0.55);
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.set(2048,2048);
     dirLight.shadow.bias = -0.00015;
@@ -769,10 +697,11 @@ function removeShadowSystem(){
   }
 }
 
-/* ---------- Variants (KHR_materials_variants) -> swatches ---------- */
+/* ---------- Variants (KHR_materials_variants) + swatches ---------- */
 async function setupVariants(gltf){
-  swatchBar.innerHTML=''; swatchBar.style.display='none';
-  variantsInfo = { names: [], selected: null };
+  // reset
+  swatchesBar.innerHTML=''; swatchesBar.style.display='none';
+  variantNames=[]; currentVariant=null; setVariantNowLabel(null);
 
   const parser = gltf.parser;
   const json   = parser.json;
@@ -781,8 +710,7 @@ async function setupVariants(gltf){
     return;
   }
 
-  const variantNames = rootExt.variants.map(v => v.name);
-  variantsInfo.names = variantNames;
+  variantNames = rootExt.variants.map(v => v.name);
 
   // cache materiales
   const matCache = new Map();
@@ -822,46 +750,39 @@ async function setupVariants(gltf){
       }
     });
     await Promise.all(pending);
-
-    // actualizar UI (desktop y mobile)
-    variantsInfo.selected = name;
-    const pretty = name;
-    statVarTag.textContent = `Variant: ${pretty}`;
-    statVarTagMobile.textContent = `Variant: ${pretty}`;
-    Array.from(swatchBar.children).forEach(el => el.classList.toggle('selected', el.dataset.varName === name));
   }
 
-  // crear swatches
-  const toTitle = (s)=> s.charAt(0).toUpperCase() + s.slice(1);
-  const swatchSrcFor = (name)=>{
-    const base = toTitle(name.replace(/^swatch_/i,''));
-    return `swatches/swatch_${base}.jpg`;
+  // construir swatches (mobile+desktop)
+  const mkSrc = (name)=>{
+    // soporta swatch_<Name>.jpg (case insensitive de carpeta)
+    return `swatches/swatch_${name}.jpg`;
   };
-
   variantNames.forEach((name, i)=>{
-    const btn = document.createElement('button');
-    btn.className = 'swatch';
-    btn.type = 'button';
-    btn.dataset.varName = name;
-
+    const b = document.createElement('button');
+    b.className = 'swatch';
+    b.setAttribute('aria-label', name);
     const img = document.createElement('img');
+    img.src = mkSrc(name);
     img.alt = name;
-    img.src = swatchSrcFor(name);
-    img.onerror = ()=>{ img.style.background = name.toLowerCase().includes('white')?'#eee':'#8b6b3c'; };
-    btn.appendChild(img);
-
-    btn.addEventListener('click', async ()=>{
+    b.appendChild(img);
+    b.addEventListener('click', async ()=>{
       await applyVariant(gltf.scene, name);
+      currentVariant = name;
+      setVariantNowLabel(name);
+      [...swatchesBar.children].forEach(x=>x.classList.remove('selected'));
+      b.classList.add('selected');
     });
-
-    swatchBar.appendChild(btn);
+    swatchesBar.appendChild(b);
   });
 
-  swatchBar.style.display = '';
-  placeSwatchesForViewport();
+  // mostrar barra
+  swatchesBar.style.display = '';
 
   // aplicar primera por defecto
-  await applyVariant(gltf.scene, variantNames[0]);
+  currentVariant = variantNames[0];
+  await applyVariant(gltf.scene, currentVariant);
+  setVariantNowLabel(currentVariant);
+  if(swatchesBar.firstElementChild) swatchesBar.firstElementChild.classList.add('selected');
 }
 
 /* ---------- placing ---------- */
@@ -908,10 +829,9 @@ function place(root, clips){
   controls.target.copy(new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3()));
   controls.update();
 
-  statModel.textContent = `Model: ${root.name || '(scene)'}`;
+  statModel.textContent = `Model: ${root.name ? prettyName(root.name) : '(scene)'}`;
   updateStats(size);
   updateTopbarVar();
-  placeSwatchesForViewport();
 }
 
 /* ---------- auto-hide wall (rooms) ---------- */
@@ -1008,22 +928,17 @@ canvas.addEventListener('pointerup', (e)=>{
 
 /* ---------- loading ---------- */
 function loadBlob(file){
-  setUIMode('clean'); clearModel();
+  setUIMode('clean'); setMsg('Loading local file…'); clearModel();
   const pre = guessModeFromFilename(file.name); if(pre) setUIMode(pre);
   lastGLBBytes = file.size; statBytes.textContent = `GLB: ${humanBytes(lastGLBBytes)}`;
-
-  const clean = cleanModelName(file.name);
-  fileNameTag.textContent = clean;
-  fileNameTag.style.display = '';
-
   const url = URL.createObjectURL(file);
   loader.load(url, async (g)=>{
       place(g.scene, g.animations||[]);
-      await setupVariants(g);
-      statModel.textContent = `Model: ${clean}`;
+      await setupVariants(g); // swatches + variantes
+      setMsg(prettyName(file.name));
       URL.revokeObjectURL(url);
     },
-    undefined, e=>{ console.error(e); });
+    undefined, e=>{ console.error(e); setMsg('Error with local file'); });
 }
 
 /* ---------- UI ---------- */
@@ -1069,9 +984,17 @@ statsToggle.addEventListener('click', ()=>{ if(!isMobile()) return;
   const open = statsEl.classList.toggle('open');
   statsToggle.setAttribute('aria-expanded', open ? 'true':'false');
 });
-addEventListener('resize', ()=>{ applyStatsMode(); placeSwatchesForViewport(); updateTopbarVar(); });
+addEventListener('resize', ()=>{ applyStatsMode(); updateTopbarVar(); });
 applyStatsMode();
-placeSwatchesForViewport();
+
+/* ---------- lock widths for performance chips ---------- */
+let statsLocked = false;
+function lockStatWidths(){
+  if(statsLocked) return;
+  const chips = document.querySelectorAll('#statsContent .tag, #variantNow');
+  chips.forEach(ch => ch.style.width = ch.offsetWidth + 'px');
+  statsLocked = true;
+}
 
 /* ---------- resize & loop ---------- */
 function resize(){
@@ -1097,6 +1020,8 @@ renderer.setAnimationLoop(()=>{
   statCalls.textContent = `Calls: ${info.render.calls}`;
   statGeoms.textContent = `Geoms: ${info.memory.geometries}`;
   statText.textContent  = `Tex: ${info.memory.textures}`;
+
+  if(!statsLocked) lockStatWidths();
 
   if(mixer) mixer.update(dt/1000);
 
