@@ -16,18 +16,11 @@
 
 <style>
   :root{
-    --topbarH:72px;            /* se actualiza por JS */
-    --stackGap:8px;            /* separación vertical estándar en móvil */
-    --padCard:10px 12px;       /* padding por defecto de cards (escritorio) */
+    --topbarH:72px;         /* se actualiza por JS */
+    --stackGap:8px;         /* separación vertical estándar en móvil */
+    --padCard:10px 12px;    /* padding por defecto de cards */
     --radiusCard:12px;
-    --edgeGap:8px;             /* margen lateral en móvil */
-
-    /* Compacidad VARIANTES en mobile (20% más chico aprox) */
-    --padVarMobile:8px 10px;           /* contenedor <details> */
-    --padVarMobileSummary:8px 10px;    /* summary */
-    --padVarMobilePanel:8px 10px;      /* cuerpo */
-    --rowGapVarMobile:8px;             /* gap interno filas */
-    --rowMarginVarMobile:6px;          /* margen vertical de cada row */
+    --edgeGap:8px;          /* margen lateral en móvil */
   }
 
   html,body{height:100%;margin:0}
@@ -58,7 +51,7 @@
   }
   .card{
     background:rgba(255,255,255,.9); backdrop-filter:blur(6px);
-    border:1px solid rgba(0,0,0,.08); border-radius:var(--radiusCard); padding:var(--padCard);
+    border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:10px 12px
   }
   details.block>summary{
     list-style:none; cursor:pointer;
@@ -85,9 +78,28 @@
     background:#f5f5f5; color:#111; font:inherit;
   }
 
-  /* VARIANTES */
+  /* VARIANTES (desktop) */
   #variantsCard{ z-index:9 }
   #variantsPanel .act-row{ margin-top:6px }
+
+  /* Swatches (mobile) */
+  #mobileVariants{
+    display:none; /* sólo visible en móvil */
+  }
+  #mobileVariants .swatches{
+    display:flex; gap:10px; align-items:center; justify-content:center;
+  }
+  .swatch{
+    width:32px; height:32px; border-radius:50%;
+    border:1px solid rgba(0,0,0,.2);
+    box-shadow:0 1px 2px rgba(0,0,0,.08) inset;
+    cursor:pointer;
+    outline:none;
+  }
+  .swatch[aria-pressed="true"]{
+    box-shadow:0 0 0 2px #2b7aff, 0 1px 2px rgba(0,0,0,.08) inset;
+    border-color:#2b7aff;
+  }
 
   /* Bottom stats / performance */
   #stats{
@@ -111,42 +123,30 @@
 
     #logo{height:36px}
 
-    /* Topbar: márgenes simétricos y auto-ajuste de ancho, con bordes redondeados */
+    /* Topbar: márgenes simétricos y auto-ajuste de ancho */
     #topbar{
       left:var(--edgeGap); right:var(--edgeGap); top:var(--stackGap);
       width:auto; max-width:unset;
-      border-radius:12px; /* redondeado en ambos lados */
+      border-radius:12px;
       display:flex; flex-wrap:wrap; gap:8px;
     }
 
     /* Ocultar ACCIONABLES en móvil */
     #animCard{ display:none !important; }
 
-    /* VARIANTES en móvil: debajo del topbar, mismo margen lateral,
-       y separación vertical igual al margen superior.
-       Más compacto en Y reduciendo padding y gaps internos (sin tocar la tipografía). */
-    #variantsCard.mobile{
+    /* VARIANTES desktop: oculto en móvil */
+    #variantsCard{ display:none !important; }
+
+    /* Swatches móviles: debajo del topbar con mismos márgenes */
+    #mobileVariants{
+      display:block;
       position:fixed;
       left:var(--edgeGap); right:var(--edgeGap);
       top:calc(var(--stackGap) + var(--topbarH) + var(--stackGap));
-      width:auto; max-width:unset;
-      border-radius:var(--radiusCard);
-      padding:var(--padVarMobile);
-    }
-    #variantsCard.mobile > summary{
-      padding:var(--padVarMobileSummary);
-      font-size:14px; /* misma tipografía */
-    }
-    #variantsCard.mobile .panel{
-      padding:var(--padVarMobilePanel);
-    }
-    #variantsCard.mobile .act-row{
-      grid-template-columns: 1fr 140px;
-      gap:var(--rowGapVarMobile);
-      margin:var(--rowMarginVarMobile) 0;
-    }
-    #variantsCard.mobile .act-row select{
-      width:140px; font-size:12px; padding:5px 6px; /* no reducimos fuente de labels */
+      background:rgba(255,255,255,.9); backdrop-filter:blur(6px);
+      border:1px solid rgba(0,0,0,.08); border-radius:12px;
+      padding:8px 10px;
+      z-index:9;
     }
 
     /* Barra inferior móvil */
@@ -174,6 +174,11 @@
     <!-- Global -->
     <label><input type="checkbox" id="autoRotateToggle"> Auto-rotate</label>
     <small id="msg"></small>
+  </div>
+
+  <!-- Tira de variantes (solo móvil) -->
+  <div id="mobileVariants" aria-label="Variants" style="display:none">
+    <div class="swatches" id="mobileSwatches"></div>
   </div>
 
   <!-- Side panel: ACCIONABLES + VARIANTES (desktop) -->
@@ -236,6 +241,9 @@ import { RoomEnvironment }from 'three/addons/environments/RoomEnvironment.js';
 /* ---------- layout helper ---------- */
 const topbar = document.getElementById('topbar');
 const variantsCard = document.getElementById('variantsCard');
+const mobileVariants = document.getElementById('mobileVariants');
+const mobileSwatches = document.getElementById('mobileSwatches');
+
 function updateTopbarVar(){
   const h = topbar?.offsetHeight || 72;
   document.documentElement.style.setProperty('--topbarH', `${h}px`);
@@ -244,21 +252,27 @@ new ResizeObserver(updateTopbarVar).observe(topbar);
 addEventListener('load', updateTopbarVar);
 addEventListener('resize', updateTopbarVar);
 
-/* mover VARIANTES según breakpoint */
+/* breakpoint helper */
 const mql = window.matchMedia('(max-width: 640px)');
+function isMobile(){ return mql.matches; }
+
+/* mover VARIANTES (desktop card permanece en sidepanel; móvil usa swatches) */
 function placeVariantsForViewport(){
-  if(!variantsCard) return;
-  if(mql.matches){
-    // móvil: debajo del topbar, márgenes simétricos
-    variantsCard.classList.add('mobile');
-    variantsCard.style.display = variantsCard.dataset.hasVariants === '1' ? '' : 'none';
-    document.body.appendChild(variantsCard);
-  } else {
-    // escritorio: vuelve al sidepanel, debajo de ACCIONABLES
-    variantsCard.classList.remove('mobile');
-    const sidepanel = document.getElementById('sidepanel');
-    sidepanel.appendChild(variantsCard);
-    variantsCard.style.display = variantsCard.dataset.hasVariants === '1' ? '' : 'none';
+  // Card de escritorio: visible sólo si hay variantes y no es mobile
+  if(!isMobile()){
+    if(variantsCard.dataset.hasVariants === '1'){
+      variantsCard.style.display = '';
+    }
+    mobileVariants.style.display = 'none';
+  }else{
+    variantsCard.style.display = 'none';
+    // swatches se activan dinámicamente en setupVariants cuando hay variantes
+    // acá solo reposicionamos el contenedor (ya es fixed por CSS)
+    if(variantsCard.dataset.hasVariants === '1'){
+      mobileVariants.style.display = 'block';
+    }else{
+      mobileVariants.style.display = 'none';
+    }
   }
   updateTopbarVar();
 }
@@ -333,7 +347,8 @@ let lastGLBBytes = null;
 
 /* Variants UI refs */
 const variantSelect = document.getElementById('variantSelect');
-variantsCard.dataset.hasVariants = '0'; // se pone a '1' cuando hay variantes
+variantsCard.dataset.hasVariants = '0'; // '1' cuando hay variantes
+let applyVariantRef = null;             // para que móvil/desktop llamen al mismo apply
 
 /* ---------- Bottom stats / performance elements ---------- */
 const statModel = document.getElementById('stat-model');
@@ -364,6 +379,7 @@ function setUIMode(mode){
     if(ceil)  ceil.style.display  = 'none';
     side.style.display = 'none';
     removeShadowSystem();
+    mobileVariants.style.display = 'none';
     return;
   }
   const isAsset = (mode === 'asset');
@@ -399,7 +415,10 @@ function clearModel(){
   // limpiar UI variantes
   variantSelect.innerHTML = '';
   variantsCard.style.display = 'none';
+  mobileVariants.style.display = 'none';
+  mobileSwatches.innerHTML = '';
   variantsCard.dataset.hasVariants = '0';
+  applyVariantRef = null;
 }
 function triCount(obj){ let t=0; obj.traverse(o=>{ if(o.isMesh){ const g=o.geometry; t += g?.index ? g.index.count/3 : (g?.attributes?.position?.count||0)/3; }}); return Math.round(t); }
 function updateStats(sizeVec){
@@ -743,12 +762,15 @@ function removeShadowSystem(){
   }
 }
 
-/* ---------- Variants (KHR_materials_variants) - en panel ---------- */
+/* ---------- Variants (KHR_materials_variants) ---------- */
 async function setupVariants(gltf){
   // limpiar UI previa
   variantSelect.innerHTML = '';
+  mobileSwatches.innerHTML = '';
   variantsCard.style.display = 'none';
+  mobileVariants.style.display = 'none';
   variantsCard.dataset.hasVariants = '0';
+  applyVariantRef = null;
 
   const parser = gltf.parser;
   const json   = parser.json;
@@ -799,8 +821,9 @@ async function setupVariants(gltf){
     });
     await Promise.all(pending);
   }
+  applyVariantRef = (n)=>applyVariant(gltf.scene, n);
 
-  // construir opciones
+  /* Desktop: select */
   variantNames.forEach((n, i)=>{
     const opt = document.createElement('option');
     opt.value = n; opt.textContent = n;
@@ -808,14 +831,62 @@ async function setupVariants(gltf){
     variantSelect.appendChild(opt);
   });
 
-  // mostrar card y ubicar según viewport
+  /* Mobile: swatches (circulitos) */
+  // Mapeo “temporal” a colores
+  function colorForName(n){
+    const s = (n||'').toLowerCase();
+    if(s.includes('brown') || s.includes('marr')) return '#8a5a3c';
+    if(s.includes('white') || s.includes('blanc')) return '#ffffff';
+    return '#cfcfcf'; // fallback
+  }
+  function makeSwatch(name, active=false){
+    const btn = document.createElement('button');
+    btn.className = 'swatch';
+    btn.title = name;
+    btn.setAttribute('aria-label', name);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    btn.style.background = colorForName(name);
+    // borde de contraste si es blanco
+    if(colorForName(name) === '#ffffff'){ btn.style.borderColor = 'rgba(0,0,0,.3)'; }
+    btn.addEventListener('click', async ()=>{
+      // actualizar estado visual
+      Array.from(mobileSwatches.querySelectorAll('.swatch')).forEach(s=>s.setAttribute('aria-pressed','false'));
+      btn.setAttribute('aria-pressed','true');
+      // aplicar variante
+      if(applyVariantRef) await applyVariantRef(name);
+      // sincronizar select oculto en móvil (para consistencia si rotan)
+      const opt = Array.from(variantSelect.options).find(o=>o.value===name);
+      if(opt) variantSelect.value = name;
+    });
+    return btn;
+  }
+  if(variantNames.length){
+    variantNames.forEach((n, i)=>{
+      mobileSwatches.appendChild(makeSwatch(n, i===0));
+    });
+  }
+
+  // mostrar UI según viewport
   variantsCard.dataset.hasVariants = '1';
-  variantsCard.style.display = '';
+  if(isMobile()){
+    mobileVariants.style.display = 'block';
+  }else{
+    variantsCard.style.display = '';
+  }
   placeVariantsForViewport();
 
   // aplicar primera por defecto
   await applyVariant(gltf.scene, variantNames[0]);
-  variantSelect.onchange = async ()=> { await applyVariant(gltf.scene, variantSelect.value); };
+
+  // select desktop change
+  variantSelect.onchange = async ()=> {
+    const v = variantSelect.value;
+    await applyVariant(gltf.scene, v);
+    // sincronizar estado de swatches si pasan a móvil
+    Array.from(mobileSwatches.querySelectorAll('.swatch')).forEach(s=>{
+      s.setAttribute('aria-pressed', s.title===v ? 'true' : 'false');
+    });
+  };
 }
 
 /* ---------- placing ---------- */
@@ -968,7 +1039,7 @@ function loadBlob(file){
   const url = URL.createObjectURL(file);
   loader.load(url, async (g)=>{
       place(g.scene, g.animations||[]);
-      await setupVariants(g); // variantes en panel
+      await setupVariants(g); // variantes (desktop select + mobile swatches)
       setMsg(file.name);
       URL.revokeObjectURL(url);
     },
@@ -1003,7 +1074,6 @@ drop.addEventListener('drop', handleDrop);
 /* ---------- stats toggle (mobile) ---------- */
 const statsEl = document.getElementById('stats');
 const statsToggle = document.getElementById('statsToggle');
-function isMobile(){ return window.matchMedia('(max-width: 640px)').matches; }
 function applyStatsMode(){
   if(isMobile()){
     statsEl.classList.remove('open');
