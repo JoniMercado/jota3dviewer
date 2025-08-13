@@ -16,9 +16,9 @@
 
 <style>
   :root{
-    --topbarH:72px;         /* se actualiza por JS */
-    --stackGap:8px;         /* separación vertical estándar en móvil */
-    --edgeGap:8px;          /* margen lateral en móvil */
+    --topbarH:72px;
+    --stackGap:8px;
+    --edgeGap:8px;
     --radiusCard:12px;
   }
 
@@ -34,7 +34,7 @@
     display:inline-flex; gap:8px; flex-wrap:wrap; align-items:center;
     background:rgba(255,255,255,.85); backdrop-filter:blur(6px);
     border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:10px 12px; z-index:10;
-    width:max-content; max-width:calc(100vw - 24px);  /* escritorio */
+    width:max-content; max-width:calc(100vw - 24px);
   }
   #topbar button{background:#1e68ff;border:none;color:white;padding:6px 10px;border-radius:6px;cursor:pointer}
   #fileInput{display:none}
@@ -49,7 +49,7 @@
     #fileNameTag{ font-size:calc(12px * 1.4); }
   }
 
-  /* Right side panel (ACCIONABLES) */
+  /* Side panel (ACCIONABLES) */
   #sidepanel{
     position:fixed; right:12px; top:12px;
     width:380px; max-height:calc(100% - 24px);
@@ -125,7 +125,7 @@
     :root{ --stackGap:8px; --edgeGap:8px; }
     #logo{height:36px}
 
-    /* topbar con márgenes simétricos y ancho auto */
+    /* topbar */
     #topbar{
       left:var(--edgeGap); right:var(--edgeGap); top:var(--stackGap);
       width:auto; max-width:unset;
@@ -138,7 +138,7 @@
     /* Ocultar ACCIONABLES en móvil */
     #animCard{ display:none !important; }
 
-    /* Swatches debajo de la top row, sin “cuadro” de fondo */
+    /* Swatches debajo del topbar, sin “cuadro” de fondo */
     #swatchBar{
       left:var(--edgeGap); right:var(--edgeGap);
       transform:none;
@@ -146,8 +146,6 @@
       margin:0 auto;
       width:auto; justify-content:center;
       gap:8px;
-
-      /* sin fondo/borde/sombra en mobile */
       background:transparent !important;
       border:none !important;
       box-shadow:none !important;
@@ -155,17 +153,21 @@
       border-radius:0 !important;
     }
     .swatch{ width:36px; height:36px; flex:0 0 36px; border-radius:999px; }
-    .swatch.selected{
-      /* conserva halo de selección aun sin fondo contenedor */
-      box-shadow:0 0 0 2px white, 0 0 0 4px #2b7aff;
-    }
+    .swatch.selected{ box-shadow:0 0 0 2px white, 0 0 0 4px #2b7aff; }
 
     /* Barra inferior móvil */
     #stats{ left:0; right:0; bottom:0; border-radius:0; padding:8px 10px; gap:8px; }
     #statsToggle{ display:inline-flex; align-items:center; color:#333; background:transparent; border:1px solid #cfd6e0; border-radius:999px; padding:6px 12px; font-weight:600; cursor:pointer; }
+    /* Mostrar el nombre de la variante al lado del botón Performance */
+    #stat-variantNameMobile{ display:inline-flex; }
+    /* Ocultar el “Model” pill en mobile */
+    #stat-model{ display:none; }
+
     #statsContent{ display:none; }
     #stats.open #statsContent{
-      display:grid; grid-template-columns: repeat(4, auto); column-gap:6px; row-gap:4px; align-items:center;
+      display:grid;
+      grid-template-columns: repeat(5, auto);  /* más columnas -> 2 filas */
+      column-gap:6px; row-gap:4px; align-items:center;
     }
     #stats .tag{ padding:3px 6px; font-size:11px; line-height:1.15 }
     #stats #stats-reset{ padding:3px 6px; font-size:11px }
@@ -186,7 +188,7 @@
     <small id="fileNameTag" title="File name" style="display:none">—</small>
   </div>
 
-  <!-- Side panel: ACCIONABLES (sigue igual en desktop) -->
+  <!-- Side panel: ACCIONABLES (desktop) -->
   <div id="sidepanel" style="display:none">
     <details id="animCard" class="block card" open style="display:none">
       <summary>ACCIONABLES</summary>
@@ -194,15 +196,17 @@
     </details>
   </div>
 
-  <!-- Swatches (móvil debajo del topbar, desktop centrado abajo) -->
+  <!-- Swatches -->
   <div id="swatchBar" style="display:none"></div>
 
   <!-- Bottom stats / performance -->
   <div id="stats">
     <button id="statsToggle" aria-expanded="false" style="display:none">Performance</button>
+    <!-- Variante al lado de performance (solo visible en mobile por CSS) -->
+    <span class="tag" id="stat-variantNameMobile" style="display:none">Variant: —</span>
+
     <div id="statsContent">
-      <!-- Quitamos el texto “Performance” duplicado.
-           El nombre de la variante queda al lado de la pill -->
+      <!-- En desktop, la variante queda como tag dentro del cuadro -->
       <span class="tag" id="stat-variantName">Variant: —</span>
 
       <span class="tag" id="stat-model">Model: —</span>
@@ -316,12 +320,12 @@ scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0,0.6,0);
 controls.enableDamping = true;
-controls.autoRotate = false; // eliminado del UI
+controls.autoRotate = false;
 controls.autoRotateSpeed = 0.8;
 
-/* Luces */
-scene.add(new THREE.HemisphereLight(0xffffff, 0x88aadd, 1.2)); // más “rebote” desde abajo
-scene.add(new THREE.AmbientLight(0xffffff, 0.55));             // un poquito más de base
+/* Luces (un poco más de luz ambiental/hemisférica) */
+scene.add(new THREE.HemisphereLight(0xffffff, 0x88aadd, 1.2));
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
 
 /* Luz direccional para sombras (modo asset) */
 let dirLight = null;
@@ -359,6 +363,7 @@ const statText   = document.getElementById('stat-text');
 const statRot    = document.getElementById('stat-rot');
 const statBytes  = document.getElementById('stat-bytes');
 const statVarTag = document.getElementById('stat-variantName');
+const statVarTagMobile = document.getElementById('stat-variantNameMobile');
 document.getElementById('stats-reset')?.addEventListener('click', ()=> renderer.info.reset());
 let fpsEMA = 0;
 
@@ -395,7 +400,6 @@ function setUIMode(mode){
 setUIMode('clean');
 
 /* ---------- helpers ---------- */
-function setMsg(t){ /* deprecado para nombre, usamos fileNameTag */ }
 function disposeMat(m){ ['map','normalMap','roughnessMap','metalnessMap','occlusionMap','emissiveMap'].forEach(k=>m[k]?.dispose?.()); }
 function clearModel(){
   if(!current) return;
@@ -409,13 +413,12 @@ function clearModel(){
   statTris.textContent  = 'Tris: —';
   statBytes.textContent = 'GLB: —';
   statVarTag.textContent = 'Variant: —';
+  statVarTagMobile.textContent = 'Variant: —';
   mixer = null;
 
-  // nombre de archivo
   fileNameTag.style.display='none';
   fileNameTag.textContent='—';
 
-  // swatches
   swatchBar.innerHTML=''; swatchBar.style.display='none';
   variantsInfo = { names: [], selected: null };
 }
@@ -820,20 +823,19 @@ async function setupVariants(gltf){
     });
     await Promise.all(pending);
 
-    // actualizar UI
+    // actualizar UI (desktop y mobile)
     variantsInfo.selected = name;
     const pretty = name;
     statVarTag.textContent = `Variant: ${pretty}`;
+    statVarTagMobile.textContent = `Variant: ${pretty}`;
     Array.from(swatchBar.children).forEach(el => el.classList.toggle('selected', el.dataset.varName === name));
   }
 
   // crear swatches
   const toTitle = (s)=> s.charAt(0).toUpperCase() + s.slice(1);
   const swatchSrcFor = (name)=>{
-    // usa mismo nombre de variante (sin prefijo swatch_), JPG
     const base = toTitle(name.replace(/^swatch_/i,''));
     return `swatches/swatch_${base}.jpg`;
-    // Ej: Wood -> swatches/swatch_Wood.jpg
   };
 
   variantNames.forEach((name, i)=>{
@@ -1010,7 +1012,6 @@ function loadBlob(file){
   const pre = guessModeFromFilename(file.name); if(pre) setUIMode(pre);
   lastGLBBytes = file.size; statBytes.textContent = `GLB: ${humanBytes(lastGLBBytes)}`;
 
-  // nombre de archivo limpio en topbar
   const clean = cleanModelName(file.name);
   fileNameTag.textContent = clean;
   fileNameTag.style.display = '';
@@ -1018,11 +1019,11 @@ function loadBlob(file){
   const url = URL.createObjectURL(file);
   loader.load(url, async (g)=>{
       place(g.scene, g.animations||[]);
-      await setupVariants(g);               // swatches
-      statModel.textContent = `Model: ${clean}`; // también reflejar acá
+      await setupVariants(g);
+      statModel.textContent = `Model: ${clean}`;
       URL.revokeObjectURL(url);
     },
-    undefined, e=>{ console.error(e); /* opcional: mensaje de error visual */ });
+    undefined, e=>{ console.error(e); });
 }
 
 /* ---------- UI ---------- */
@@ -1059,7 +1060,7 @@ function applyStatsMode(){
     statsToggle.style.display = 'inline-flex';
     statsToggle.setAttribute('aria-expanded','false');
   }else{
-    statsEl.classList.add('open'); // visible en desktop
+    statsEl.classList.add('open');
     statsToggle.style.display = 'none';
     statsToggle.setAttribute('aria-expanded','true');
   }
@@ -1096,7 +1097,6 @@ renderer.setAnimationLoop(()=>{
   statCalls.textContent = `Calls: ${info.render.calls}`;
   statGeoms.textContent = `Geoms: ${info.memory.geometries}`;
   statText.textContent  = `Tex: ${info.memory.textures}`;
-  // statRot oculto, dejamos como está
 
   if(mixer) mixer.update(dt/1000);
 
