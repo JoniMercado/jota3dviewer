@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Asset viewer — v0.2.6</title>
+<title>Room Viewer — v0.2.6</title>
 
 <script type="importmap">
 {
@@ -117,6 +117,42 @@
   #stats .tag{background:#f2f4f8;border:1px solid #dfe3eb;border-radius:8px;padding:4px 8px;font-size:12px}
   #stats button{background:#eee;border:1px solid #ccc;border-radius:6px;padding:4px 8px;cursor:pointer}
 
+  /* ===== Performance: tamaños fijos por tag (para evitar saltos/solapes) ===== */
+  :root{
+    --perf-tag-h: 30px;
+    --perf-tag-px: 10px;
+    --w-variant: 14ch;
+    --w-model:   16ch;
+    --w-size:    22ch;   /* Size necesita más ancho con datos reales */
+    --w-tris:    12ch;
+    --w-fps:     10ch;
+    --w-ms:      10ch;
+    --w-calls:   10ch;
+    --w-geoms:   11ch;
+    --w-tex:     9ch;
+    --w-glb:     13ch;
+  }
+  #stats .tag{
+    display:inline-flex; align-items:center; justify-content:center;
+    height:var(--perf-tag-h);
+    padding:0 var(--perf-tag-px);
+    white-space:nowrap;
+    flex:0 0 auto;
+    font-variant-numeric: tabular-nums;
+  }
+  #stat-variantName{      min-width:var(--w-variant); }
+  #stat-variantNameMobile{min-width:var(--w-variant); }
+  #stat-model{ min-width:var(--w-model); }
+  #stat-size{  min-width:var(--w-size); }
+  #stat-tris{  min-width:var(--w-tris); }
+  #stat-fps{   min-width:var(--w-fps); }
+  #stat-ms{    min-width:var(--w-ms); }
+  #stat-calls{ min-width:var(--w-calls); }
+  #stat-geoms{ min-width:var(--w-geoms); }
+  #stat-text{  min-width:var(--w-tex); }
+  #stat-bytes{ min-width:var(--w-glb); }
+  #stats #stats-reset{ height:var(--perf-tag-h); }
+
   #drop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;border:2px dashed #2a2f36;border-radius:16px;background:rgba(30,104,255,.08);color:#1e68ff;pointer-events:auto;z-index:999}
   canvas{display:block;width:100%;height:100%}
 
@@ -164,10 +200,12 @@
     #stat-model{ display:none; }
 
     #statsContent{ display:none; }
+    /* Forzar dos filas estables al desplegar performance */
     #stats.open #statsContent{
       display:grid;
-      grid-template-columns: repeat(5, auto);  /* más columnas -> 2 filas */
-      column-gap:6px; row-gap:4px; align-items:center;
+      grid-auto-flow:column;
+      grid-template-rows: repeat(2, var(--perf-tag-h));
+      gap:6px; align-items:center;
     }
     #stats .tag{ padding:3px 6px; font-size:11px; line-height:1.15 }
     #stats #stats-reset{ padding:3px 6px; font-size:11px }
@@ -826,8 +864,9 @@ async function setupVariants(gltf){
     // actualizar UI (desktop y mobile)
     variantsInfo.selected = name;
     const pretty = name;
-    statVarTag.textContent = `Variant: ${pretty}`;
-    statVarTagMobile.textContent = `Variant: ${pretty}`;
+    const setText = `Variant: ${pretty}`;
+    statVarTag.textContent = setText;
+    statVarTagMobile.textContent = setText;
     Array.from(swatchBar.children).forEach(el => el.classList.toggle('selected', el.dataset.varName === name));
   }
 
@@ -1108,3 +1147,4 @@ renderer.setAnimationLoop(()=>{
 </script>
 </body>
 </html>
+```0
