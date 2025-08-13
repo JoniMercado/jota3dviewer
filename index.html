@@ -40,7 +40,14 @@
   #fileInput{display:none}
   #logo{height:48px;margin-right:12px;border-radius:6px}
   label, small {display:flex;align-items:center;gap:6px}
-  #fileNameTag{font-size:12px; opacity:.75; background:#f2f4f8; border:1px solid #dfe3eb; border-radius:8px; padding:3px 6px;}
+  #fileNameTag{
+    font-size:12px; opacity:.85; background:#f2f4f8; border:1px solid #dfe3eb;
+    border-radius:8px; padding:3px 6px; line-height:1.2;
+  }
+  /* +40% en escritorio */
+  @media (min-width: 641px){
+    #fileNameTag{ font-size:calc(12px * 1.4); }
+  }
 
   /* Right side panel (ACCIONABLES) */
   #sidepanel{
@@ -87,13 +94,13 @@
   .swatch{
     width:40px; height:40px; border-radius:999px; overflow:hidden; position:relative;
     border:1px solid rgba(0,0,0,.12); cursor:pointer; flex:0 0 40px;
-    display:inline-flex; align-items:center; justify-content:center;
     background:#eee;
   }
   .swatch img{
-    width:110%; height:110%; /* cubre completamente el círculo incluso con bordes */
-    object-fit:cover; pointer-events:none;
-    transform:translateZ(0); /* evita blur en móviles */
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    object-fit:cover; display:block; pointer-events:none;
+    transform:translateZ(0);
   }
   .swatch.selected{
     box-shadow:0 0 0 2px white, 0 0 0 4px #2b7aff;
@@ -125,21 +132,33 @@
       border-radius:12px;
       display:flex; flex-wrap:wrap; gap:8px;
     }
+    /* +20% al nombre del archivo en mobile */
+    #fileNameTag{ font-size:calc(12px * 1.2); }
 
     /* Ocultar ACCIONABLES en móvil */
     #animCard{ display:none !important; }
 
-    /* Swatches debajo de la top row, centrados y con mismo gap que arriba */
+    /* Swatches debajo de la top row, sin “cuadro” de fondo */
     #swatchBar{
       left:var(--edgeGap); right:var(--edgeGap);
       transform:none;
       top:calc(var(--stackGap) + var(--topbarH) + var(--stackGap));
       margin:0 auto;
       width:auto; justify-content:center;
-      border-radius:12px;
       gap:8px;
+
+      /* sin fondo/borde/sombra en mobile */
+      background:transparent !important;
+      border:none !important;
+      box-shadow:none !important;
+      padding:0 !important;
+      border-radius:0 !important;
     }
-    .swatch{ width:36px; height:36px; flex:0 0 36px; }
+    .swatch{ width:36px; height:36px; flex:0 0 36px; border-radius:999px; }
+    .swatch.selected{
+      /* conserva halo de selección aun sin fondo contenedor */
+      box-shadow:0 0 0 2px white, 0 0 0 4px #2b7aff;
+    }
 
     /* Barra inferior móvil */
     #stats{ left:0; right:0; bottom:0; border-radius:0; padding:8px 10px; gap:8px; }
@@ -163,7 +182,7 @@
     <label style="display:none"><input type="checkbox" id="doorsToggle"> All Doors Open</label>
     <label style="display:none"><input type="checkbox" id="autoHideToggle" checked> Auto-hide front wall</label>
     <label style="display:none"><input type="checkbox" id="hideCeilingToggle" checked> Hide ceiling</label>
-    <!-- Nombre del archivo (limpio) en lugar del auto-rotate -->
+    <!-- Nombre del archivo (limpio) -->
     <small id="fileNameTag" title="File name" style="display:none">—</small>
   </div>
 
@@ -182,8 +201,10 @@
   <div id="stats">
     <button id="statsToggle" aria-expanded="false" style="display:none">Performance</button>
     <div id="statsContent">
-      <span class="tag">Performance</span>
+      <!-- Quitamos el texto “Performance” duplicado.
+           El nombre de la variante queda al lado de la pill -->
       <span class="tag" id="stat-variantName">Variant: —</span>
+
       <span class="tag" id="stat-model">Model: —</span>
       <span class="tag" id="stat-size">Size: —</span>
       <span class="tag" id="stat-tris">Tris: —</span>
@@ -801,16 +822,18 @@ async function setupVariants(gltf){
 
     // actualizar UI
     variantsInfo.selected = name;
-    statVarTag.textContent = `Variant: ${name}`;
+    const pretty = name;
+    statVarTag.textContent = `Variant: ${pretty}`;
     Array.from(swatchBar.children).forEach(el => el.classList.toggle('selected', el.dataset.varName === name));
   }
 
   // crear swatches
   const toTitle = (s)=> s.charAt(0).toUpperCase() + s.slice(1);
   const swatchSrcFor = (name)=>{
-    // coincidencia insensible a mayúsculas y sin prefijo "swatch_"
+    // usa mismo nombre de variante (sin prefijo swatch_), JPG
     const base = toTitle(name.replace(/^swatch_/i,''));
     return `swatches/swatch_${base}.jpg`;
+    // Ej: Wood -> swatches/swatch_Wood.jpg
   };
 
   variantNames.forEach((name, i)=>{
