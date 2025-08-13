@@ -18,7 +18,6 @@
   :root{
     --topbarH:72px;
     --stackGap:8px;
-    --padCard:10px 12px;
     --radiusCard:12px;
     --edgeGap:8px;
   }
@@ -81,13 +80,15 @@
   .swatch{
     width:42px; height:42px; border-radius:50%; overflow:hidden; position:relative;
     box-shadow:0 1px 4px rgba(0,0,0,.2); cursor:pointer; border:2px solid transparent;
-    background:#fff;
+    padding:0; background:#fff; display:inline-block; line-height:0;
   }
   .swatch.selected{ border-color:#1e68ff; }
   .swatch img{
-    width:100%; height:100%; display:block;
+    position:absolute; inset:0;
+    width:100%; height:100%;
     object-fit:cover; object-position:center;
-    transform:translateZ(0); /* asegura pintar hasta el borde */
+    display:block; border-radius:50%;
+    transform:translateZ(0);
   }
 
   /* Bottom stats / performance */
@@ -100,27 +101,24 @@
   #stats .tag, #variantNow{
     background:#f2f4f8;border:1px solid #dfe3eb;border-radius:8px;padding:4px 8px;font-size:12px;
     white-space:nowrap; display:inline-flex; align-items:center; justify-content:center;
+    flex:0 0 auto;
   }
   #stats button{background:#eee;border:1px solid #ccc;border-radius:6px;padding:4px 8px;cursor:pointer}
 
   #drop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;border:2px dashed #2a2f36;border-radius:16px;background:rgba(30,104,255,.08);color:#1e68ff;pointer-events:auto;z-index:999}
   canvas{display:block;width:100%;height:100%}
 
-  /* ---------- Mobile tweaks ---------- */
+  /* ---------- Mobile ---------- */
   @media (max-width: 640px){
-    :root{ --stackGap:8px; --edgeGap:8px; }
-
     #logo{height:36px}
     #topbar{
       left:var(--edgeGap); right:var(--edgeGap); top:var(--stackGap);
       width:auto; max-width:unset; border-radius:12px;
       display:flex; flex-wrap:wrap; gap:8px;
     }
-
-    /* Ocultar ACCIONABLES en móvil */
     #animCard{ display:none !important; }
 
-    /* Swatches en mobile: sin fondo, debajo del topbar */
+    /* Swatches: debajo del topbar, sin card */
     #swatchesBar{
       bottom:auto;
       top:calc(var(--stackGap) + var(--topbarH) + var(--stackGap));
@@ -134,7 +132,7 @@
     #statsToggle{ display:inline-flex; align-items:center; color:#333; background:transparent; border:1px solid #cfd6e0; border-radius:999px; padding:6px 12px; font-weight:600; cursor:pointer; }
     #statsContent{ display:none; }
     #stats.open #statsContent{
-      display:grid; grid-template-columns: repeat(4, auto); column-gap:6px; row-gap:4px; align-items:center;
+      display:flex; flex-wrap:wrap; align-items:center; gap:8px;
     }
     #stats .tag, #variantNow{ padding:3px 6px; font-size:11px; line-height:1.15 }
     #stats #stats-reset{ padding:3px 6px; font-size:11px }
@@ -151,7 +149,7 @@
     <label style="display:none"><input type="checkbox" id="doorsToggle"> All Doors Open</label>
     <label style="display:none"><input type="checkbox" id="autoHideToggle" checked> Auto-hide front wall</label>
     <label style="display:none"><input type="checkbox" id="hideCeilingToggle" checked> Hide ceiling</label>
-    <!-- Global -->
+    <!-- Global (oculto como pediste) -->
     <label style="display:none"><input type="checkbox" id="autoRotateToggle"> Auto-rotate</label>
     <small id="msg"></small>
   </div>
@@ -164,14 +162,14 @@
     </details>
   </div>
 
-  <!-- Swatches (mobile/desktop) -->
+  <!-- Swatches -->
   <div id="swatchesBar" style="display:none"></div>
 
   <!-- Bottom stats / performance -->
   <div id="stats">
     <button id="statsToggle" aria-expanded="false" style="display:none">Performance</button>
     <span id="variantNow" class="tag" title="Selected variant">Variant: —</span>
-    <div id="statsContent">
+    <div id="statsContent" style="display:flex; flex-wrap:wrap; align-items:center; gap:10px;">
       <span class="tag" id="stat-model">Model: —</span>
       <span class="tag" id="stat-size">Size: —</span>
       <span class="tag" id="stat-tris">Tris: —</span>
@@ -252,7 +250,8 @@ const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 100)
 camera.position.set(2,1.2,2);
 
 const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.035).texture; // un poco más luminosa
+/* un poquito más de iluminación global */
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.035).texture;
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0,0.6,0);
@@ -260,10 +259,11 @@ controls.enableDamping = true;
 controls.autoRotate = false;
 controls.autoRotateSpeed = 0.8;
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0.9));   // ↑ más contribución
-scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+/* Iluminaciones */
+scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 1.0));  /* superior */
+scene.add(new THREE.AmbientLight(0xffffff, 0.35));              /* relleno */
 
-/* Luz direccional para sombras (modo asset) */
+/* Direccional para sombras (modo asset) */
 let dirLight = null;
 
 /* ---------- loaders ---------- */
@@ -377,14 +377,12 @@ function extractIndex(name){
   match = name.match(/(\d+)(?!.*\d)/);  return match ? match[1] : null;
 }
 function extractSide(name){
-  if(!name) return null;
   if(/leftpanel/i.test(name) || /_left/i.test(name)) return 'left';
   if(/rightpanel/i.test(name) || /_right/i.test(name)) return 'right';
   return null;
 }
 function doorGroupKey(name){
-  if(!name) return '';
-  const m = name.match(/^(?:door_)?(.+)$/i);
+  const m = name?.match(/^(?:door_)?(.+)$/i);
   return (m?m[1]:name).toLowerCase();
 }
 function stripDoorPrefix(s){ return s?.replace(/^door_/i,'') ?? s; }
@@ -405,7 +403,7 @@ function reparentKeepWorld(child, newParent){
   child.updateMatrixWorld(true);
 }
 
-/* ---------- puertas (rooms) — estático ---------- */
+/* ---------- puertas (rooms) ---------- */
 function findDoorPanels(nodes){
   const panels = nodes.filter(o => /(leftpanel|rightpanel)\d+$/i.test(o.name) && !/_open|_closed/i.test(o.name));
   return panels.map(o=>{
@@ -475,7 +473,6 @@ function reparentHardwareToDoors(nodes, _doorPanels){
     const groupKeyPref = doorGroupKey(h.name);
 
     let target = (idx!=null) ? pickPreferredDoorRoot(idx, sidePref, groupKeyPref) : null;
-
     if(!target){
       let candidates = _doorPanels;
       const sameGroup = _doorPanels.filter(d => (d.userData.groupKey ?? doorGroupKey(d.name)) === groupKeyPref);
@@ -493,7 +490,6 @@ function reparentHardwareToDoors(nodes, _doorPanels){
       });
       target = best;
     }
-
     if(target && h.parent !== target) reparentKeepWorld(h, target);
   });
 }
@@ -576,7 +572,6 @@ function renderActionsPanel(){
   if(!panel) return;
   panel.innerHTML = '';
 
-  // Puertas
   doorGroups.forEach((g)=>{
     const row = document.createElement('div'); row.className='act-row';
     const name = document.createElement('div'); name.textContent = g.name; row.appendChild(name);
@@ -586,39 +581,13 @@ function renderActionsPanel(){
     panel.appendChild(row);
   });
 
-  // Morphs
   if(!assetRoot){
     document.getElementById('animCard').style.display='none';
     return;
   }
-  const animRoots = findAnimRoots(assetRoot);
-  const groups = [];
-  objectToGroup.clear();
-
-  animRoots.forEach((ar, gi)=>{
-    const meshes = collectMorphMeshes(ar); if(!meshes.length) return;
-    const morphNames = uniqueNamesFromMeshes(meshes); if(!morphNames.length) return;
-    ar.traverse(n=>{ objectToGroup.set(n, gi); });
-    groups.push({ name: ar.name, node: ar, meshes, morphNames, activeMorph: morphNames[0], sliderEl:null, selectEl:null, tween:null });
-  });
-  animGroups = groups;
-
-  animGroups.forEach(group=>{
-    const row = document.createElement('div'); row.className='act-row';
-    const label = document.createElement('div'); label.textContent = stripAnimPrefix(group.name); row.appendChild(label);
-
-    const slider = document.createElement('input'); slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.01'; slider.value='0';
-    slider.oninput=()=>{ const val=parseFloat(slider.value);
-      group.meshes.forEach(m=>{ const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return;
-        if(group.activeMorph in d){ inf[d[group.activeMorph]]=val; m.needsUpdate=true; }
-      });
-    };
-    row.appendChild(slider); group.sliderEl=slider;
-    panel.appendChild(row);
-  });
-
-  document.getElementById('animCard').style.display='';
 }
+
+/* ---------- Door anim helpers ---------- */
 function setDoorValue(group, value){
   group.value = THREE.MathUtils.clamp(value, 0, 1);
   if(!group.action) return;
@@ -699,16 +668,13 @@ function removeShadowSystem(){
 
 /* ---------- Variants (KHR_materials_variants) + swatches ---------- */
 async function setupVariants(gltf){
-  // reset
   swatchesBar.innerHTML=''; swatchesBar.style.display='none';
   variantNames=[]; currentVariant=null; setVariantNowLabel(null);
 
   const parser = gltf.parser;
   const json   = parser.json;
   const rootExt = json.extensions && json.extensions.KHR_materials_variants;
-  if(!rootExt || !rootExt.variants || !rootExt.variants.length){
-    return;
-  }
+  if(!rootExt || !rootExt.variants || !rootExt.variants.length) return;
 
   variantNames = rootExt.variants.map(v => v.name);
 
@@ -752,12 +718,9 @@ async function setupVariants(gltf){
     await Promise.all(pending);
   }
 
-  // construir swatches (mobile+desktop)
-  const mkSrc = (name)=>{
-    // soporta swatch_<Name>.jpg (case insensitive de carpeta)
-    return `swatches/swatch_${name}.jpg`;
-  };
-  variantNames.forEach((name, i)=>{
+  const mkSrc = (name)=> `swatches/swatch_${name}.jpg`;
+
+  variantNames.forEach((name)=>{
     const b = document.createElement('button');
     b.className = 'swatch';
     b.setAttribute('aria-label', name);
@@ -775,10 +738,7 @@ async function setupVariants(gltf){
     swatchesBar.appendChild(b);
   });
 
-  // mostrar barra
   swatchesBar.style.display = '';
-
-  // aplicar primera por defecto
   currentVariant = variantNames[0];
   await applyVariant(gltf.scene, currentVariant);
   setVariantNowLabel(currentVariant);
@@ -863,7 +823,7 @@ function updateAutoHide(){
   for(const wr of front){ if(!lastHiddenWalls.has(wr)){ wr.visible=false; lastHiddenWalls.add(wr);} }
 }
 
-/* ---------- Clicks (morphs y puertas) ---------- */
+/* ---------- Clicks ---------- */
 const mouse = new THREE.Vector2();
 let downPos = null;
 function screenToNDC(e){
@@ -899,31 +859,6 @@ canvas.addEventListener('pointerup', (e)=>{
     tweenDoor(g, target, 500);
     return;
   }
-  if(assetRoot){
-    const gi = findMorphGroupFromObject(obj);
-    if(gi!=null){
-      const group = animGroups[gi];
-      const probe = group.meshes.find(m=>m.morphTargetDictionary && group.activeMorph in m.morphTargetDictionary);
-      if(probe){
-        const idx = probe.morphTargetDictionary[group.activeMorph];
-        const cur = probe.morphTargetInfluences[idx] ?? 0;
-        const target = (cur >= 0.5) ? 0 : 1;
-        const start = performance.now();
-        const from = cur;
-        const step = (t)=>{
-          const k = Math.min(1, (t-start)/500);
-          const v = from + (target-from)*k;
-          group.meshes.forEach(m=>{
-            const d=m.morphTargetDictionary, inf=m.morphTargetInfluences; if(!d||!inf) return;
-            if(group.activeMorph in d){ inf[d[group.activeMorph]] = v; m.needsUpdate = true; }
-          });
-          if(group.sliderEl) group.sliderEl.value = String(v);
-          if(k<1) requestAnimationFrame(step);
-        };
-        requestAnimationFrame(step);
-      }
-    }
-  }
 });
 
 /* ---------- loading ---------- */
@@ -934,7 +869,7 @@ function loadBlob(file){
   const url = URL.createObjectURL(file);
   loader.load(url, async (g)=>{
       place(g.scene, g.animations||[]);
-      await setupVariants(g); // swatches + variantes
+      await setupVariants(g);
       setMsg(prettyName(file.name));
       URL.revokeObjectURL(url);
     },
